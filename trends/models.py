@@ -20,7 +20,7 @@ class TrendQuery(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.industry} | {self.region} | {self.persona} | {self.date_range}"
+        return f"{self.industry} | {self.region} | {self.persona} | {self.date_range} | {self.id} | {self.status}"
 
 
 class TrendResult(models.Model):
@@ -39,4 +39,4 @@ class TrendResult(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.topic} (Score: {self.final_score})"
+        return f"{self.topic} (Score: {self.final_score} | Query ID: {self.query.id})"

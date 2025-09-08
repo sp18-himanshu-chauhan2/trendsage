@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'trends',
 ]
 
 MIDDLEWARE = [
@@ -127,3 +128,20 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Celery | Redis Configuration 
+CELERY_BROKER_URL = config("REDIS_URL", default="redis://127.0.0.1:6379/0")
+CELERY_RESULT_BACKEND = config("REDIS_URL", default="redis://127.0.0.1:6379/0")
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "UTC"
+
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    "fetch-trends-every-minute": {
+        "task": "trends.tasks.fetch_trends_mock_task",  # our scheduled task
+        "schedule": 60.0,  # every 60 seconds (for testing)
+    },
+}

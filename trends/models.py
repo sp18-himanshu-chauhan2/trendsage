@@ -38,5 +38,14 @@ class TrendResult(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def calculate_final_score(self, weights=(0.4, 0.3, 0.3)):
+        engagement, freshness, relevance = weights
+
+        self.final_score = round(
+            (self.engagement_score * engagement) +
+            (self.freshness_score * freshness) +
+            (self.relevance_score * relevance), 2)
+        return self.final_score
+
     def __str__(self):
         return f"{self.topic} (Score: {self.final_score} | Query ID: {self.query.id})"

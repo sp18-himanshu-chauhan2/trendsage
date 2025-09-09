@@ -20,7 +20,7 @@ class TrendResultSerializer(serializers.ModelSerializer):
 
 
 class TrendQuerySerializer(serializers.ModelSerializer):
-    results = TrendResultSerializer(many=True, read_only=True)
+    results = serializers.SerializerMethodField()
 
     class Meta:
         model = TrendQuery
@@ -34,6 +34,10 @@ class TrendQuerySerializer(serializers.ModelSerializer):
             'created_at',
             'results',
         ]
+
+    def get_results(self, obj):
+        results = obj.results.order_by("-final_score")
+        return TrendResultSerializer(results, many=True).data
 
 
 class TrendQueryCreateSerializer(serializers.ModelSerializer):

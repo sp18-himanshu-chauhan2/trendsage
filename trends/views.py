@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 from .models import TrendQuery, TrendResult
 from .serializers import TrendQuerySerializer, TrendResultSerializer, TrendQueryCreateSerializer
 from .tasks import process_trend_query
+from rest_framework.pagination import PageNumberPagination
 # Create your views here.
 
 
@@ -38,14 +39,36 @@ class TrendListView(APIView):
             return Response([], status=status.HTTP_200_OK)
 
         results = TrendResult.objects.filter(
-            query=query).order_by('final_score')
-        serializer = TrendResultSerializer(results, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+            query=query).order_by('-final_score')
+        # Pagination...
+        paginator = PageNumberPagination()
+        paginator_qs = paginator.paginate_queryset(results, request)
+        serializer = TrendResultSerializer(paginator_qs, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 class TrendQueryDetailView(APIView):
     def get(self, request, id):
         query = get_object_or_404(TrendQuery, id=id)
+
+        if query.status == 'pending':
+            return Response(
+                {
+                    'message': "Query is pending. Please check again later.",
+                    'status': query.status
+                },
+                status=status.HTTP_202_ACCEPTED,
+            )
+
+        if query.status == 'failed':
+            return Response(
+                {
+                    'message': 'Query failed. Please retry.',
+                    'status': query.status
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
         serializer = TrendQuerySerializer(query)
         return Response(serializer.data, status=status.HTTP_200_OK)
 

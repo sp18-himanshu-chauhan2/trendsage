@@ -10,41 +10,42 @@ from rest_framework.pagination import PageNumberPagination
 # Create your views here.
 
 
-class TrendListView(APIView):
-    def get(self, request):
-        industry = request.query_params.get('industry')
-        region = request.query_params.get('region')
-        persona = request.query_params.get('persona')
-        date_range = request.query_params.get('date_range')
+# --- Commented out for now ---
+# class TrendListView(APIView):
+#     def get(self, request):
+#         industry = request.query_params.get('industry')
+#         region = request.query_params.get('region')
+#         persona = request.query_params.get('persona')
+#         date_range = request.query_params.get('date_range')
 
-        if not all([industry, region, persona, date_range]):
-            return Response(
-                {
-                    'error': 'All parameters (industry, region, persona, date_range) are required.'
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+#         if not all([industry, region, persona, date_range]):
+#             return Response(
+#                 {
+#                     'error': 'All parameters (industry, region, persona, date_range) are required.'
+#                 },
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
 
-        query = (
-            TrendQuery.objects.filter(
-                industry=industry,
-                region=region,
-                persona=persona,
-                date_range=date_range,
-                status='completed',
-            ).order_by('-created_at').first()
-        )
+#         queries = (
+#             TrendQuery.objects.filter(
+#                 industry=industry,
+#                 region=region,
+#                 persona=persona,
+#                 date_range=date_range,
+#                 status='completed',
+#             ).order_by('-created_at')
+#         )
 
-        if not query:
-            return Response([], status=status.HTTP_200_OK)
+#         if not queries.exists():
+#             return Response([], status=status.HTTP_200_OK)
 
-        results = TrendResult.objects.filter(
-            query=query).order_by('-final_score')
-        # Pagination...
-        paginator = PageNumberPagination()
-        paginator_qs = paginator.paginate_queryset(results, request)
-        serializer = TrendResultSerializer(paginator_qs, many=True)
-        return paginator.get_paginated_response(serializer.data)
+#         results = TrendResult.objects.filter(
+#             query__in=queries).order_by('-final_score')
+#         # Pagination...
+#         paginator = PageNumberPagination()
+#         paginator_qs = paginator.paginate_queryset(results, request)
+#         serializer = TrendResultSerializer(paginator_qs, many=True)
+#         return paginator.get_paginated_response(serializer.data)
 
 
 class TrendQueryDetailView(APIView):

@@ -7,6 +7,10 @@ from .models import TrendQuery, TrendResult
 from .serializers import TrendQuerySerializer, TrendResultSerializer, TrendQueryCreateSerializer
 from .tasks import process_trend_query
 from rest_framework.pagination import PageNumberPagination
+from django.utils.timezone import now
+from datetime import timedelta
+from django.db import connection
+from celery import current_app as celery_app
 # Create your views here.
 
 
@@ -79,14 +83,50 @@ class TrendQueryCreateView(APIView):
         serializer = TrendQueryCreateSerializer(data=request.data)
 
         if serializer.is_valid():
-            query = serializer.save(status='pending')
+            industry = serializer.validated_data["industry"]
+            region = serializer.validated_data["region"]
+            persona = serializer.validated_data["persona"]
+            date_range = serializer.validated_data["date_range"]
+
+            one_day_ago = now() - timedelta(days=1)
+            existing_query = (
+                TrendQuery.objects.filter(
+                    industry=industry,
+                    region=region,
+                    persona=persona,
+                    date_range=date_range,
+                    status="completed",
+                    created_at__gte=one_day_ago,
+                )
+                .order_by("-created_at")
+                .first()
+            )
+
+            if existing_query:
+                return Response(
+                    {
+                        "message": "Using existing recent query results.",
+                        "query_id": str(existing_query.id),
+                        "status": existing_query.status,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            query = serializer.save(status="pending")
             process_trend_query.delay(str(query.id))
             return Response(
                 {
-                    'message': 'Trend query created successfully. Processing started.',
-                    'query_id': str(query.id),
-                    'status': query.status,
+                    "message": "Trend query created successfully. Processing started.",
+                    "query_id": str(query.id),
+                    "status": query.status,
                 },
                 status=status.HTTP_201_CREATED,
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class TrendResultDetailView(APIView):
+    def get(self, request, id):
+        trend = get_object_or_404(TrendResult, id=id)
+        serializer = TrendResultSerializer(trend)
+        return Response(serializer.data, status=status.HTTP_200_OK)

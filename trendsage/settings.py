@@ -145,3 +145,8 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 60.0,  # every 60 seconds (for testing)
     },
 }
+
+REST_FRAMEWORK = {
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 10,
+}

@@ -3,109 +3,172 @@ import logging
 from decouple import config
 from .models import TrendQuery, TrendResult
 from .query_builder import build_perplexity_query
-
+from django.utils import timezone
+import json
+import time
+import re
 
 logger = logging.getLogger(__name__)
-
 PERPLEXITY_API_KEY = config("PERPLEXITY_API_KEY", default='')
-
 API_URL = "https://api.perplexity.ai/chat/completions"
 
 
-def fetch_trends_from_perplexity(query_obj: TrendQuery):
+def compute_engagement_from_sources(sources):
+    urls = sources.get("urls", []) if isinstance(sources, dict) else []
+    base = min(100, len(urls) * 20)
+    return float(base)
+
+
+def compute_freshness_from_sources(sources, query_created_at):
+    dates = sources.get("dates", []) if isinstance(sources, dict) else []
+
+    if dates:
+        try:
+            parsed = [timezone.datetime.fromisoformat(d) for d in dates]
+            newest = max(parsed)
+            age_days = (timezone.now() - newest).days
+            score = max(0.0, 100.0 - age_days * 5)
+            return float(score)
+        except Exception:
+            pass
+
+    age_days = (timezone.now() - query_created_at).days
+    return float(max(0.0, 100.0 - age_days * 3))
+
+
+def compute_relevance(query_obj, topic, summary):
+    q_tokens = set(re.findall(
+        r"\w+", f"{query_obj.industry} {query_obj.persona} {query_obj.region} {query_obj.date_range}".lower()))
+
+    text_tokens = set(re.findall(r"\w+", f"{topic} {summary}".lower()))
+
+    if not q_tokens or not text_tokens:
+        return 0.0
+
+    inter = q_tokens.intersection(text_tokens)
+    union = q_tokens.union(text_tokens)
+    score = (len(inter) / len(union)) * 100.0
+    return float(round(score, 2))
+
+
+def extract_json_from_text(text):
+    m = re.search(r'(\{.*"results"\s*:\s*\[.*\]\s*\})', text, re.S)
+
+    if m:
+        try:
+            return json.loads(m.group(1))
+        except Exception:
+            pass
+
+    m2 = re.search(r'(\[.*\])', text, re.S)
+
+    if m2:
+        try:
+            return json.loads(m2.group)
+        except Exception:
+            pass
+
+    return None
+
+
+def fetch_trends_from_perplexity(query_obj: TrendQuery, max_retries=3, timeout=30):
     headers = {
         "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
         "Content-Type": "application/json",
     }
 
     query_text = build_perplexity_query(
-        query_obj.industry, 
-        query_obj.region, 
-        query_obj.persona, 
+        query_obj.industry,
+        query_obj.region,
+        query_obj.persona,
         query_obj.date_range,
     )
 
     payload = {
-        "q": query_text,
-        "search_type": "web",
-        "num_results": 5,
-        "response_format": "detailed",
-        "include_sources": True,
-        "include_summaries": True,
-        "include_suggested_angles": True,
+        "model": "sonar-pro",
+        "messages": [
+            {
+                "role": "user",
+                "content": query_text
+            }
+        ],
+        "temperature": 0.2,
     }
 
+    resp = None
+    for attempt in range(max_retries):
+        try:
+            resp = requests.post(
+                API_URL, headers=headers, json=payload, timeout=timeout)
+            resp.raise_for_status()
+            break
+        except requests.exceptions.ReadTimeout:
+            logger.warning(f"Timeout on attempt {attempt+1} / {max_retries}")
+            if attempt < max_retries - 1:
+                time.sleep(2)
+                continue
+            else:
+                raise
+
     try:
-        response = requests.post(
-            API_URL, headers=headers, json=payload, timeout=30)
+        data = resp.json()
+        content = (
+            data.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+        ).strip()
 
-        if response.status_code != 200:
-            logger.error(
-                f"Perplexity API Error: {response.status_code}: {response.text}")
-            query_obj.status = 'failed'
+        print("Raw content:", content)
+
+        # Try direct JSON
+        try:
+            parsed = json.loads(content)
+        except Exception:
+            parsed = extract_json_from_text(content)
+
+        if not parsed or "results" not in parsed:
+            logger.warning("No valid results in API response")
+            query_obj.status = "completed"
             query_obj.save()
-            return None
+            return []
 
-        data = response.json()
+        for r in parsed["results"]:
+            sources = r.get("sources", {})
+            engagement_score = r.get("engagement")
+            freshness_score = r.get("freshness")
+            relevance_score = r.get("relevance")
 
-        results = data.get("results", [])
+            if engagement_score is None:
+                engagement_score = compute_engagement_from_sources(sources)
 
-        for r in results:
-            TrendResult.objects.create(
+            if freshness_score is None:
+                freshness_score = compute_freshness_from_sources(
+                    sources, query_obj.created_at)
+
+            if relevance_score is None:
+                relevance_score = compute_relevance(
+                    query_obj, r.get("topic", ""), r.get("summary", ""))
+
+            trend = TrendResult.objects.create(
                 query=query_obj,
-                topic=r.get("topic", "Unknown"),
+                topic=r.get("topic", "Untitled"),
                 summary=r.get("summary", ""),
-                sources={
-                    "urls": r.get("urls", []),
-                    "citations": r.get("citations", []),
-                    "snippets": r.get("snippets", []),
-                },
-                engagement_score=0.0,
-                freshness_score=0.0,
-                relevance_score=0.0,
-                final_score=0.0,
-                suggested_angles=r.get("angles", []),
+                sources=sources,
+                engagement_score=float(engagement_score),
+                freshness_score=float(freshness_score),
+                relevance_score=float(relevance_score),
+                suggested_angles=r.get(
+                    "suggested_angles") or r.get("angles") or [],
             )
+            trend.calculate_final_score()
+            trend.save()
 
-        query_obj.status = 'completed'
+        query_obj.status = "completed"
         query_obj.save()
-        return results
+        return parsed["results"]
 
     except Exception as e:
         logger.exception("Error calling Perplexity API")
-        query_obj.status = 'failed'
+        query_obj.status = "failed"
         query_obj.save()
-        return None
-
-
-def fetch_trends_mock(query_obj: TrendQuery):
-    dummy_results = [
-        {
-            "topic": "AI in Education",
-            "summary": "AI-driven tools are transforming EdTech...",
-            "urls": ["https://example.com/ai-education"],
-            "snippets": ["AI is reshaping classrooms..."],
-            "angles": ["Write about AI tutors", "Impact on teachers"],
-        },
-        {
-            "topic": "Remote Learning Platforms",
-            "summary": "Increased adoption of remote platforms post-pandemic...",
-            "urls": ["https://example.com/remote-learning"],
-            "snippets": ["Zoom, Teams adoption rising..."],
-            "angles": ["Market analysis", "Startup opportunities"],
-        },
-    ]
-
-    for r in dummy_results:
-        TrendResult.objects.create(
-            query=query_obj,
-            topic=r["topic"],
-            summary=r["summary"],
-            sources={"urls": r["urls"], "snippets": r["snippets"]},
-            final_score=0.0,
-            suggested_angles=r["angles"],
-        )
-
-    query_obj.status = "completed"
-    query_obj.save()
-    return dummy_results
+        raise

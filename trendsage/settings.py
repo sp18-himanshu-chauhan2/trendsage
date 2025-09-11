@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+from celery.schedules import crontab
 from pathlib import Path
 from decouple import config
 import os
@@ -39,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',
     'rest_framework',
     'trends',
 ]
@@ -58,7 +60,7 @@ ROOT_URLCONF = 'trendsage.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / "templates"],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -129,7 +131,7 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Celery | Redis Configuration 
+# Celery | Redis Configuration
 CELERY_BROKER_URL = config("REDIS_URL", default="redis://127.0.0.1:6379/0")
 CELERY_RESULT_BACKEND = config("REDIS_URL", default="redis://127.0.0.1:6379/0")
 CELERY_ACCEPT_CONTENT = ["json"]
@@ -137,12 +139,10 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"
 
-from celery.schedules import crontab
-
 CELERY_BEAT_SCHEDULE = {
-    "fetch-trends-every-minute": {
-        "task": "trends.tasks.fetch_trends_mock_task",  # our scheduled task
-        "schedule": 60.0,  # every 60 seconds (for testing)
+    "fetch-trends-every-hour": {
+        "task": "trends.tasks.process_trend_query",  # our scheduled task
+        "schedule": crontab(minute=0, hour="*"),  # every 1 hour (for testing)
     },
 }
 

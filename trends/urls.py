@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import TrendQueryDetailView, TrendQueryCreateView
+from .views import TrendQueryDetailView, TrendQueryCreateView, TrendResultDetailView
 
 
 urlpatterns = [
@@ -8,4 +8,6 @@ urlpatterns = [
         name='trend-query-detail'),
     path('trends/query/', TrendQueryCreateView.as_view(),
         name='trend-query-create'),
+    path("trends/<uuid:id>/", TrendResultDetailView.as_view(),
+        name="trend-result-detail"),
 ]

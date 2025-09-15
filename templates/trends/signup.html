@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Sign Up</h2>
+    <form method="post">
+        {% csrf_token %}
+        <input type="text" name="first_name" placeholder="First Name" class="form-control mb-2" required>
+        <input type="text" name="last_name" placeholder="Last Name" class="form-control mb-2" required>
+        <input type="email" name="email" placeholder="Email" class="form-control mb-2" required>
+        <input type="password" name="password" placeholder="Password" class="form-control mb-2" required>
+        <input type="password" name="password2" placeholder="Confirm Password" class="form-control mb-2" required>
+        <button class="btn btn-primary" type="submit">Sign Up</button>
+    </form>
+    <p class="mt-2">Already have an account? <a href="{% url 'login' %}">Login</a></p>
+</div>
+{% endblock %}

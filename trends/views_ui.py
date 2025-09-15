@@ -106,17 +106,19 @@ def submit_query(request):
 
         if existing_query:
             # ✅ Reuse existing query → redirect to its detail page
+            existing_query.user.add(request.user)
             return redirect(reverse("query-detail-frontend", args=[existing_query.id]))
 
         # ❌ If no recent query found → create new one
         query = TrendQuery.objects.create(
-            user=request.user,
             industry=industry,
             region=region,
             persona=persona,
             date_range=date_range,
             status="pending",
         )
+
+        query.user.add(request.user)
 
         process_trend_query.delay(str(query.id))
 
@@ -129,6 +131,12 @@ def submit_query(request):
 @login_required
 def query_detail(request, id):
     query = get_object_or_404(TrendQuery, id=id)
+
+    if request.user not in query.user.all():
+        return render(request, "trends/query_detail.html", {
+            "error": "You do not have permission to view this query."
+        })
+    
     results = TrendResult.objects.filter(query=query).order_by("-final_score")
     return render(request, "trends/query_detail.html", {
         "query": query,
@@ -138,6 +146,13 @@ def query_detail(request, id):
 
 @login_required
 def result_detail(request, query_id, id):
+    query = get_object_or_404(TrendQuery, id=query_id)
+
+    if request.user not in query.user.all():
+        return render(request, "trends/result_detail.html", {
+            "error": "You do not have permission to view this result."
+        })
+    
     result = get_object_or_404(TrendResult, id=id, query__id=query_id)
     return render(request, "trends/result_detail.html", {
         "result": result,

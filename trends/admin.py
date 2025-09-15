@@ -1,6 +1,7 @@
 from django.contrib import admin
-from .models import TrendQuery, TrendResult
+from .models import TrendQuery, TrendResult, User
 
 # Register your models here.
 admin.site.register(TrendQuery)
 admin.site.register(TrendResult)
+admin.site.register(User)

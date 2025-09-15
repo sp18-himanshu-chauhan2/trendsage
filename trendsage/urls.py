@@ -20,4 +20,5 @@ from django.urls import path, include
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('trendsage/api/', include('trends.urls')),
+    path('trendsage/web/', include('trends.urls_ui')),
 ]

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Create a Trend Query</h2>
+<form method="post" action="{% url 'trend-query-create-frontend' %}" class="row g-3">
+    {% csrf_token %}
+    <div class="mb-3">
+        <label class="form-label">Industry</label>
+        <input type="text" class="form-control" name="industry" placeholder="e.g. EdTech" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Region</label>
+        <input type="text" class="form-control" name="region" placeholder="e.g. India" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Persona</label>
+        <input type="text" class="form-control" name="persona" placeholder="e.g. founders" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Date Range</label>
+        <input type="text" class="form-control" name="date_range" placeholder="e.g. last_month" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Submit Query</button>
+</form>
+{% endblock %}

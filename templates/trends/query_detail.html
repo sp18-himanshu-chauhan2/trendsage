@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block content %}
+<h2>Query Results</h2>
+
+<p><strong>Industry:</strong> {{ query.industry }}</p>
+<p><strong>Region:</strong> {{ query.region }}</p>
+<p><strong>Persona:</strong> {{ query.persona }}</p>
+<p><strong>Date Range:</strong> {{ query.date_range }}</p>
+
+{% if results.exists %}
+    <p><strong>Status:</strong> {{ query.status }}</p>
+    <p><strong>Last Updated:</strong> {{ query.updated_at|naturaltime }}</p>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Topic</th>
+                <th>Summary</th>
+                <th>Final Score</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for trend in results %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ trend.topic }}</td>
+                <td>{{ trend.summary|truncatechars:100 }}</td>
+                <td>{{ trend.final_score }}</td>
+                <td>
+                    <a href="{% url 'trend-result-detail-frontend' query.id trend.id %}" class="btn btn-sm btn-info">
+                        View
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p><strong>Status:</strong> Processing… please wait ⏳</p>
+    <p>The page will refresh automatically when results are ready.</p>
+
+    <script>
+        // Auto-refresh after 5 seconds if results are empty
+        setTimeout(function() {
+            window.location.reload();
+        }, 5000);
+    </script>
+{% endif %}
+{% endblock %}
+
+
+{% comment %} 
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Trend Results</h2>
+
+{% if query %}
+<div class="mb-4">
+    <h5>Query Info</h5>
+    <p><strong>Industry:</strong> {{ query.industry }}</p>
+    <p><strong>Region:</strong> {{ query.region }}</p>
+    <p><strong>Persona:</strong> {{ query.persona }}</p>
+    <p><strong>Date Range:</strong> {{ query.date_range }}</p>
+    <p><strong>Status:</strong> {{ query.status }}</p>
+</div>
+{% endif %}
+
+{% if results %}
+<div class="row row-cols-1 g-4">
+    {% for r in results %}
+    <div class="col">
+        <div class="card shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title">{{ forloop.counter }}. {{ r.topic }}</h5>
+            <p class="card-text">{{ r.summary }}</p>
+            <p><strong>Final Score:</strong> {{ r.final_score }}</p>
+
+            {% if r.sources.urls %}
+            <p><strong>Sources:</strong></p>
+            <ul>
+            {% for url in r.sources.urls %}
+            <li><a href="{{ url }}" target="_blank">{{ url }}</a></li>
+            {% endfor %}
+            </ul>
+            {% endif %}
+
+            {% if r.suggested_angles %}
+            <p><strong>Suggested Angles:</strong> {{ r.suggested_angles|join:", " }}</p>
+            {% endif %}
+        </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p>No results found yet. Please check back later.</p>
+{% endif %}
+{% endblock %}
+{% endcomment %}

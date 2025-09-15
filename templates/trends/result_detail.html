@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>{{ result.topic }}</h2>
+
+<p><strong>Summary:</strong> {{ result.summary }}</p>
+<p><strong>Final Score:</strong> {{ result.final_score }}</p>
+<p><strong>Engagement:</strong> {{ result.engagement_score }}</p>
+<p><strong>Freshness:</strong> {{ result.freshness_score }}</p>
+<p><strong>Relevance:</strong> {{ result.relevance_score }}</p>
+
+{% if result.sources.urls %}
+    <h4>Sources</h4>
+    <ul>
+        {% for url in result.sources.urls %}
+        <li><a href="{{ url }}" target="_blank">{{ url }}</a></li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+{% if result.suggested_angles %}
+    <h4>Suggested Angles</h4>
+    <ul>
+        {% for angle in result.suggested_angles %}
+        <li>{{ angle }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<a href="{% url 'query-form-frontend' %}" class="btn btn-secondary mt-3">Back to Query Form</a>
+{% endblock %}

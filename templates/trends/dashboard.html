@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Welcome, {{ request.user.first_name }} {{ request.user.last_name }} 👋</h2>
+    <h3 class="mt-4">Your Queries</h3>
+    <ul class="list-group">
+        {% for q in queries %}
+        <li class="list-group-item">
+            {{ q.industry }} | {{ q.region }} | {{ q.persona }} | {{ q.date_range }}
+            <small class="text-muted">(Status: {{ q.status }} | Updated: {{ q.updated_at|date:"d-m-Y" }})</small>
+            <a href="/trendsage/web/query/{{ q.id }}/results" class="btn btn-sm btn-outline-info float-end">View</a>
+        </li>
+        {% empty %}
+        <li class="list-group-item">No queries yet. Start by creating one!</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}

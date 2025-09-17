@@ -169,7 +169,7 @@ def query_detail(request, id):
         },
     )
 
-
+ 
 @login_required
 def result_detail(request, query_id, id):
     query = get_object_or_404(TrendQuery, id=query_id)

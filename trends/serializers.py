@@ -2,6 +2,19 @@ from rest_framework import serializers
 from .models import TrendQuery, TrendResult
 
 
+class SignupSerializer(serializers.Serializer):
+    first_name = serializers.CharField()
+    last_name = serializers.CharField()
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+    password2 = serializers.CharField(write_only=True)
+
+
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
+
 class TrendResultSerializer(serializers.ModelSerializer):
     class Meta:
         model = TrendResult

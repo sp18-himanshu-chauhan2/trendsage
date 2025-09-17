@@ -4,55 +4,156 @@ from rest_framework.views import APIView
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from .models import TrendQuery, TrendResult
-from .serializers import TrendQuerySerializer, TrendResultSerializer, TrendQueryCreateSerializer
+from .serializers import TrendQuerySerializer, TrendResultSerializer, TrendQueryCreateSerializer, SignupSerializer, LoginSerializer
 from .tasks import process_trend_query
 from rest_framework.pagination import PageNumberPagination
 from django.utils.timezone import now
 from datetime import timedelta
-from django.db import connection
 from celery import current_app as celery_app
+from django.contrib.auth import authenticate, login, logout, get_user_model
+from django.contrib.auth.hashers import make_password
+from uuid import UUID
+from drf_yasg.utils import swagger_auto_schema
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.authtoken.models import Token
 # Create your views here.
 
 
-# --- Commented out for now ---
-# class TrendListView(APIView):
-#     def get(self, request):
-#         industry = request.query_params.get('industry')
-#         region = request.query_params.get('region')
-#         persona = request.query_params.get('persona')
-#         date_range = request.query_params.get('date_range')
+User = get_user_model()
 
-#         if not all([industry, region, persona, date_range]):
-#             return Response(
-#                 {
-#                     'error': 'All parameters (industry, region, persona, date_range) are required.'
-#                 },
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
 
-#         queries = (
-#             TrendQuery.objects.filter(
-#                 industry=industry,
-#                 region=region,
-#                 persona=persona,
-#                 date_range=date_range,
-#                 status='completed',
-#             ).order_by('-created_at')
-#         )
+class SignupAPI(APIView):
+    permission_classes = [AllowAny]
 
-#         if not queries.exists():
-#             return Response([], status=status.HTTP_200_OK)
+    @swagger_auto_schema(request_body=SignupSerializer)
+    def post(self, request):
+        first_name = request.data.get("first_name")
+        last_name = request.data.get("last_name")
+        email = request.data.get("email")
+        password = request.data.get("password")
+        password2 = request.data.get("password2")
 
-#         results = TrendResult.objects.filter(
-#             query__in=queries).order_by('-final_score')
-#         # Pagination...
-#         paginator = PageNumberPagination()
-#         paginator_qs = paginator.paginate_queryset(results, request)
-#         serializer = TrendResultSerializer(paginator_qs, many=True)
-#         return paginator.get_paginated_response(serializer.data)
+        if not all([first_name, last_name, email, password, password2]):
+            return Response(
+                {
+                    "success": False,
+                    "message": "All fields are required"
+                }, 
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if password != password2:
+            return Response(
+                {"success": False, "message": "Passwords do not match"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if User.objects.filter(email=email).exists():
+            return Response(
+                {"success": False, "message": "Email already in use"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = User.objects.create_user(
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name,
+        )
+
+        token, _ = Token.objects.get_or_create(user=user)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Signup successful",
+                "data": {
+                    "user_id": str(user.id),
+                    "full_name": f"{user.first_name} {user.last_name}",
+                    "email": user.email,
+                    "token": token.key
+                },
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class LoginAPI(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(request_body=LoginSerializer)
+    def post(self, request):
+        email = request.data.get("email")
+        password = request.data.get("password")
+
+        if not email or not password:
+            return Response(
+                {"success": False, "message": "Email and password are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = authenticate(request, email=email, password=password)
+        if user is None:
+            return Response(
+                {"success": False, "message": "Invalid credentials"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        login(request, user)
+
+        token, _ = Token.objects.get_or_create(user=user)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Login successful",
+                "data": {
+                    "user_id": str(user.id),
+                    "full_name": f"{user.first_name} {user.last_name}",
+                    "email": user.email,
+                    "token": token.key
+                },
+            }
+        )
+
+
+class LogoutAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        Token.objects.filter(user=request.user).delete()
+        logout(request)
+        return Response(
+            {"success": True, "message": "Logged out successfully"},
+            status=status.HTTP_200_OK,
+        )
+
+
+class DashboardAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(responses={200: "Dashboard data with queries."})
+    def get(self, request):
+        queries = request.user.trend_queries.all().order_by("-created_at")
+        serializer = TrendQuerySerializer(queries, many=True)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Dashboard data fetched successfully",
+                "data": {
+                    "full_name": f"{request.user.first_name} {request.user.last_name}",
+                    "email": request.user.email,
+                    "queries": serializer.data,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class TrendQueryDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, id):
         query = get_object_or_404(TrendQuery, id=id)
 
@@ -79,6 +180,8 @@ class TrendQueryDetailView(APIView):
 
 
 class TrendQueryCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         serializer = TrendQueryCreateSerializer(data=request.data)
 
@@ -103,6 +206,28 @@ class TrendQueryCreateView(APIView):
             )
 
             if existing_query:
+                new_query = TrendQuery.objects.create(
+                    user=request.user,
+                    industry=industry,
+                    region=region,
+                    persona=persona,
+                    date_range=date_range,
+                    status="completed",
+                )
+
+                for result in existing_query.results.all():
+                    TrendResult.objects.create(
+                        query=new_query,
+                        topic=result.topic,
+                        summary=result.summary,
+                        sources=result.sources,
+                        engagement_score=result.engagement_score,
+                        freshness_score=result.freshness_score,
+                        relevance_score=result.relevance_score,
+                        final_score=result.final_score,
+                        suggested_angles=result.suggested_angles,
+                    )
+
                 return Response(
                     {
                         "message": "Using existing recent query results.",
@@ -112,7 +237,7 @@ class TrendQueryCreateView(APIView):
                     status=status.HTTP_200_OK,
                 )
 
-            query = serializer.save(status="pending")
+            query = serializer.save(status="pending", user=request.user)
             process_trend_query.delay(str(query.id))
             return Response(
                 {
@@ -126,7 +251,24 @@ class TrendQueryCreateView(APIView):
 
 
 class TrendResultDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, id):
-        trend = get_object_or_404(TrendResult, id=id)
+        try:
+            UUID(str(id))
+        except ValueError:
+            return Response(
+                {"error": "Invalid ID format. Must be a valid UUID."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            trend = TrendResult.objects.get(id=id)
+        except TrendResult.DoesNotExist:
+            return Response(
+                {"error": "TrendResult not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
         serializer = TrendResultSerializer(trend)
         return Response(serializer.data, status=status.HTTP_200_OK)

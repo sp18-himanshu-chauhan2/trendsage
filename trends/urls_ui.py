@@ -10,4 +10,12 @@ urlpatterns = [
         name="query-detail-frontend"),
     path("query/<uuid:query_id>/results/<uuid:id>/", views_ui.result_detail,
         name="trend-result-detail-frontend"),
+
+    # Auth
+    path("signup/", views_ui.signup_view, name="signup"),
+    path("login/", views_ui.login_view, name="login"),
+    path("logout/", views_ui.logout_view, name="logout"),
+
+    # Dashboard
+    path("dashboard/", views_ui.dashboard, name="dashboard"),
 ]

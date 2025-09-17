@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                "Helvetica Neue", Arial;
+                color: #222;
+            }
+            .container {
+                max-width: 680px;
+                margin: 20px auto;
+                padding: 18px;
+                border: 1px solid #e6e6e6;
+                border-radius: 8px;
+            }
+            h1 {
+                font-size: 20px;
+                margin-bottom: 8px;
+            }
+            .meta {
+                color: #666;
+                font-size: 13px;
+                margin-bottom: 12px;
+            }
+            .trend {
+                border-top: 1px solid #f0f0f0;
+                padding: 12px 0;
+            }
+            .topic {
+                font-weight: 600;
+                font-size: 16px;
+                margin-bottom: 6px;
+            }
+            .summary {
+                color: #333;
+                margin-bottom: 6px;
+            }
+            .scores {
+                font-size: 13px;
+                color: #555;
+                margin-bottom: 6px;
+            }
+            .link {
+                display: inline-block;
+                margin-top: 8px;
+                padding: 8px 12px;
+                background-color: #0d6efd;
+                color: #fff;
+                text-decoration: none;
+                border-radius: 6px;
+            }
+            footer {
+                color: #888;
+                font-size: 12px;
+                margin-top: 16px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+        <h1>{{ subject }}</h1>
+        <p>Hello {{ user.first_name }},</p>
+        <div class="meta">
+            Query: <strong>{{ query.industry }}</strong> • {{ query.region }} • {{ query.persona }} • {{ query.date_range }}<br />
+            Version: {{ version }} | Updated: {{ updated_at|date:"M d, Y H:i" }}
+        </div>
+
+        {% if results %} {% for result in results %}
+        <div class="trend">
+            <div class="topic">{{ forloop.counter }}. {{ result.topic }}</div>
+            <div class="summary">{{ result.summary }}</div>
+            <div class="scores">
+            Final: {{ result.final_score }} • Engagement: {{ result.engagement_score }} •
+            Freshness: {{ result.freshness_score }} • Relevance: {{ result.relevance_score }}
+            </div>
+            {% if result.sources.urls %}
+            <div class="sources">
+            Sources:
+            <ul>
+                {% for url in result.sources.urls|slice:":3" %}
+                <li><a href="{{ url }}">{{ url }}</a></li>
+                {% endfor %}
+            </ul>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        <a class="link" style="color: #fff;" href="{{ detail_url }}">View full results</a>
+        {% else %}
+        <p>{{ message }}</p>
+        <a class="link" style="color: #fff;" href="{{ detail_url }}">View on Trendsage</a>
+        {% endif %}
+
+        <footer>
+            You are receiving this email because you (or someone on your team)
+            created this query on Trendsage.
+            <br />If you don't want email notifications, you can
+            <a href="{{ unsubscribe_url }}">unsubscribe</a>.
+        </footer>
+        </div>
+    </body>
+</html>

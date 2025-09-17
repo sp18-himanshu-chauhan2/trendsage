@@ -1,0 +1,22 @@
+{{ subject }}
+
+Hello {{ user.first_name }},
+
+Query: {{ query.industry }} • {{ query.region }} • {{ query.persona }} • {{ query.date_range }}
+Version: {{ version }} | Updated: {{ updated_at }}
+
+{% if results %}
+{% for r in results %}
+{{ forloop.counter }}. {{ r.topic }}
+Summary: {{ r.summary|truncatechars:200 }}
+Final: {{ r.final_score }} • Engagement: {{ r.engagement_score }} • Freshness: {{ r.freshness_score }} • Relevance: {{ r.relevance_score }}
+Sources: {% if r.sources.urls %}{{ r.sources.urls|join:", " }}{% endif %}
+
+{% endfor %}
+View full results: {{ detail_url }}
+{% else %}
+{{ message }}
+View on Trendsage: {{ detail_url }}
+{% endif %}
+
+To unsubscribe: {{ unsubscribe_url }}

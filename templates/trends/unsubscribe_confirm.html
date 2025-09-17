@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h3>Unsubscribe from TrendSage emails</h3>
+    <p>Are you sure you want to stop receiving email updates for trends?</p>
+    <form method="post">{% csrf_token %}
+        <button class="btn btn-danger" type="submit">Yes, unsubscribe me</button>
+        <a class="btn btn-secondary" href="{% url 'dashboard' %}">No, keep me subscribed</a>
+    </form>
+</div>
+{% endblock %}

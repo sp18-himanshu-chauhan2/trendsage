@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 import requests
 from .models import TrendQuery, TrendResult
-from django.contrib.auth import login, logout, authenticate
+from django.contrib.auth import login, logout, authenticate, get_user_model
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib.auth.decorators import login_required
 from .models import TrendQuery
@@ -9,8 +9,11 @@ from django.utils.timezone import now
 from datetime import timedelta
 from django.urls import reverse
 from .tasks import process_trend_query
+from django.db.models import Max
+from django.views.decorators.http import require_http_methods
 
 API_BASE = "http://127.0.0.1:8000/trendsage/api"
+User = get_user_model()
 
 
 # --- Signup ---
@@ -105,11 +108,11 @@ def submit_query(request):
         )
 
         if existing_query:
-            # ✅ Reuse existing query → redirect to its detail page
+            # Reuse existing query → redirect to its detail page
             existing_query.user.add(request.user)
             return redirect(reverse("query-detail-frontend", args=[existing_query.id]))
 
-        # ❌ If no recent query found → create new one
+        # If no recent query found → create new one
         query = TrendQuery.objects.create(
             industry=industry,
             region=region,
@@ -122,7 +125,7 @@ def submit_query(request):
 
         process_trend_query.delay(str(query.id))
 
-        # ✅ Redirect to detail page
+        # Redirect to detail page
         return redirect(reverse("query-detail-frontend", args=[query.id]))
 
     return render(request, "trends/query_form.html")
@@ -132,16 +135,39 @@ def submit_query(request):
 def query_detail(request, id):
     query = get_object_or_404(TrendQuery, id=id)
 
+    version_param = request.GET.get("version")
+
+    if version_param:
+        try:
+            version = int(version_param)
+        except ValueError:
+            version = query.results.aggregate(Max("version"))[
+                "version__max"] or 1
+    else:
+        version = query.results.aggregate(Max("version"))["version__max"] or 1
+
     if request.user not in query.user.all():
         return render(request, "trends/query_detail.html", {
             "error": "You do not have permission to view this query."
         })
-    
-    results = TrendResult.objects.filter(query=query).order_by("-final_score")
-    return render(request, "trends/query_detail.html", {
-        "query": query,
-        "results": results
-    })
+
+    versions = (
+        query.results.values_list("version", flat=True)
+        .distinct()
+        .order_by("-version")
+    )
+
+    results = query.results.filter(version=version).order_by("-final_score")
+    return render(
+        request,
+        "trends/query_detail.html",
+        {
+            "query": query,
+            "results": results,
+            "version": version,
+            "versions": versions,
+        },
+    )
 
 
 @login_required
@@ -152,9 +178,20 @@ def result_detail(request, query_id, id):
         return render(request, "trends/result_detail.html", {
             "error": "You do not have permission to view this result."
         })
-    
+
     result = get_object_or_404(TrendResult, id=id, query__id=query_id)
     return render(request, "trends/result_detail.html", {
         "result": result,
         "query_id": query_id
     })
+
+
+def unsubscribe_confirm(request, user_id):
+    user = get_object_or_404(User, id=user_id)
+
+    if request.method == "POST":
+        user.wants_emails = False
+        user.save()
+        return render(request, "trends/unsubscribed.html", {"user": user})
+
+    return render(request, "trends/unsubscribe_confirm.html", {"user": user})

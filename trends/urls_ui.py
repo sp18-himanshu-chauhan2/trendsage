@@ -18,4 +18,7 @@ urlpatterns = [
 
     # Dashboard
     path("dashboard/", views_ui.dashboard, name="dashboard"),
+
+    #unsubscribe
+    path("unsubscribe/<uuid:user_id>/", views_ui.unsubscribe_confirm, name="unsubscribe-confirm")
 ]

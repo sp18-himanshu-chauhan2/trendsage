@@ -28,6 +28,8 @@ class User(AbstractUser):
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
 
+    wants_emails = models.BooleanField(default=True)
+
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["first_name", "last_name"]
 
@@ -45,15 +47,21 @@ class TrendQuery(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL,
-            on_delete=models.CASCADE, related_name="trend_queries",             
-            null=True, blank=True)
+    user = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="trend_queries",
+        null=True, 
+        blank=True
+    )
     industry = models.CharField(max_length=100)
     region = models.CharField(max_length=100)
     persona = models.CharField(max_length=100)
     date_range = models.CharField(max_length=50)
     status = models.CharField(
-        max_length=10, choices=STATUS_CHOICES, default='pending')
+        max_length=10, 
+        choices=STATUS_CHOICES, 
+        default='pending'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -63,8 +71,8 @@ class TrendQuery(models.Model):
 
 class TrendResult(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    query = models.ForeignKey(
-        TrendQuery, related_name='results', on_delete=models.CASCADE)
+    query = models.ForeignKey(TrendQuery, related_name='results', on_delete=models.CASCADE)
+    version = models.PositiveIntegerField(default=1)
     topic = models.CharField(max_length=255)
     summary = models.TextField()
     sources = models.JSONField(default=dict)
@@ -76,7 +84,7 @@ class TrendResult(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def calculate_final_score(self, weights=(0.4, 0.3, 0.3)):
+    def calculate_final_score(self, weights=(0.3, 0.4, 0.3)):
         engagement, freshness, relevance = weights
 
         self.final_score = round(

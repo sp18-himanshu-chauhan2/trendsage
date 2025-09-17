@@ -132,6 +132,11 @@ def fetch_trends_from_perplexity(query_obj: TrendQuery, max_retries=3, timeout=3
             query_obj.save()
             return []
 
+        from django.db.models import Max
+        latest_version = query_obj.results.aggregate(Max("version"))[
+            "version__max"] or 0
+        new_version = latest_version + 1
+
         for r in parsed["results"]:
             sources = r.get("sources", {})
             engagement_score = r.get("engagement")
@@ -159,6 +164,7 @@ def fetch_trends_from_perplexity(query_obj: TrendQuery, max_retries=3, timeout=3
                 relevance_score=float(relevance_score),
                 suggested_angles=r.get(
                     "suggested_angles") or r.get("angles") or [],
+                version=new_version,
             )
             trend.calculate_final_score()
             trend.save()

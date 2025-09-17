@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h3>You're unsubscribed</h3>
+    <p>{{ user.first_name }}, you've been unsubscribed from TrendSage emails. If this was a mistake, log in and enable notifications in your profile.</p>
+    <a href="{% url 'dashboard' %}" class="btn btn-primary">Back to home</a>
+</div>
+{% endblock %}

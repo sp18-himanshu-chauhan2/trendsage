@@ -8,10 +8,25 @@
 <p><strong>Region:</strong> {{ query.region }}</p>
 <p><strong>Persona:</strong> {{ query.persona }}</p>
 <p><strong>Date Range:</strong> {{ query.date_range }}</p>
+<p><strong>Status:</strong> {{ query.status }}</p>
+<p><strong>Last Updated:</strong> {{ query.updated_at|naturaltime }}</p>
+
+{% if versions %}
+    <p>
+        <strong>Viewing Version:</strong> {{ version }}
+        <br>
+        <strong>Other Versions:</strong>
+        {% for v in versions %}
+            {% if v == version %}
+                <span class="badge bg-primary">{{ v }}</span>
+            {% else %}
+                <a href="?version={{ v }}" class="badge bg-secondary">{{ v }}</a>
+            {% endif %}
+        {% endfor %}
+    </p>
+{% endif %}
 
 {% if results.exists %}
-    <p><strong>Status:</strong> {{ query.status }}</p>
-    <p><strong>Last Updated:</strong> {{ query.updated_at|naturaltime }}</p>
     <table class="table table-striped">
         <thead>
             <tr>

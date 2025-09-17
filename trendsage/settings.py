@@ -142,9 +142,10 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"
 
 CELERY_BEAT_SCHEDULE = {
-    "fetch-trends-every-hour": {
-        "task": "trends.tasks.process_trend_query",  # our scheduled task
-        "schedule": crontab(minute=0, hour="*"),  # every 1 hour (for testing)
+    "refresh-trend-queries-daily": {
+        "task": "trends.tasks.refresh_trend_queries",
+        "schedule": 60.0,  # every 1 min (for testing)
+        # "schedule": crontab(minute=0, hour="*"),
     },
 }
 
@@ -165,7 +166,7 @@ REST_FRAMEWORK = {
 AUTH_USER_MODEL = "trends.User"
 
 SWAGGER_SETTINGS = {
-    "USE_SESSION_AUTH": False,   # we will use token in swagger "Authorize"
+    "USE_SESSION_AUTH": False,   # use token in swagger "Authorize"
     "SECURITY_DEFINITIONS": {
         "Token": {
             "type": "apiKey",
@@ -176,3 +177,16 @@ SWAGGER_SETTINGS = {
     },
 }
 
+EMAIL_BACKEND = config("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
+
+# SMTP configuration (Gmail)
+EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+
+# Your Gmail credentials
+EMAIL_HOST_USER = config("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
+
+# Default from address
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER)

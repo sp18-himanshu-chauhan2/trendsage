@@ -64,6 +64,14 @@
         }, 5000);
     </script>
 {% endif %}
+<form method="post" action="{% url 'toggle-subscription' query.id %}">
+    {% csrf_token %}
+    {% if subscribed %}
+        <button name="action" value="unsubscribe" class="btn btn-outline-danger">Disable Email Notifications</button>
+    {% else %}
+        <button name="action" value="subscribe" class="btn btn-primary">Enable Email Notifications</button>
+    {% endif %}
+</form>
 <a href="{% url 'dashboard' %}" class="btn btn-secondary mt-3">← Back to Dashboard</a>
 {% endblock %}
 

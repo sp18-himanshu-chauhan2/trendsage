@@ -13,7 +13,7 @@ class CustomUserManager(BaseUserManager):
         user.set_password(password)
         user.save(using=self._db)
         return user
-    
+
     def create_superuser(self, email, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
@@ -50,7 +50,7 @@ class TrendQuery(models.Model):
     user = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         related_name="trend_queries",
-        null=True, 
+        null=True,
         blank=True
     )
     industry = models.CharField(max_length=100)
@@ -58,8 +58,8 @@ class TrendQuery(models.Model):
     persona = models.CharField(max_length=100)
     date_range = models.CharField(max_length=50)
     status = models.CharField(
-        max_length=10, 
-        choices=STATUS_CHOICES, 
+        max_length=10,
+        choices=STATUS_CHOICES,
         default='pending'
     )
     created_at = models.DateTimeField(auto_now_add=True)
@@ -71,7 +71,8 @@ class TrendQuery(models.Model):
 
 class TrendResult(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    query = models.ForeignKey(TrendQuery, related_name='results', on_delete=models.CASCADE)
+    query = models.ForeignKey(
+        TrendQuery, related_name='results', on_delete=models.CASCADE)
     version = models.PositiveIntegerField(default=1)
     topic = models.CharField(max_length=255)
     summary = models.TextField()
@@ -95,3 +96,31 @@ class TrendResult(models.Model):
 
     def __str__(self):
         return f"{self.topic} (Score: {self.final_score} | Query ID: {self.query.id})"
+
+
+class QuerySubscription(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="query_subscriptions",
+    )
+    query = models.ForeignKey(
+        TrendQuery,
+        on_delete=models.CASCADE,
+        related_name="subscriptions"
+    )
+    wants_emails = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("user", "query")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Subscription: {self.user} -> {self.query} (emails={self.wants_emails})"

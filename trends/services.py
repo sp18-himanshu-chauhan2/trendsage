@@ -4,13 +4,17 @@ from decouple import config
 from .models import TrendQuery, TrendResult
 from .query_builder import build_perplexity_query
 from django.utils import timezone
+from datetime import datetime
+from sentence_transformers import SentenceTransformer, util
 import json
 import time
 import re
+import math
 
 logger = logging.getLogger(__name__)
 PERPLEXITY_API_KEY = config("PERPLEXITY_API_KEY", default='')
 API_URL = "https://api.perplexity.ai/chat/completions"
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 def compute_engagement_from_sources(sources):
@@ -19,36 +23,38 @@ def compute_engagement_from_sources(sources):
     return float(base)
 
 
-def compute_freshness_from_sources(sources, query_created_at):
+def compute_freshness_from_sources(sources, query_created_at, decay_factor=7):
     dates = sources.get("dates", []) if isinstance(sources, dict) else []
 
-    if dates:
+    parsed_dates = []
+    for d in dates:
         try:
-            parsed = [timezone.datetime.fromisoformat(d) for d in dates]
-            newest = max(parsed)
-            age_days = (timezone.now() - newest).days
-            score = max(0.0, 100.0 - age_days * 5)
-            return float(score)
+            dt = datetime.fromisoformat(d)
+            if timezone.is_naive(dt):
+                dt = timezone.make_aware(dt, timezone.get_current_timezone())
+            parsed_dates.append(dt)
         except Exception:
-            pass
+            continue
 
-    age_days = (timezone.now() - query_created_at).days
-    return float(max(0.0, 100.0 - age_days * 3))
+    if parsed_dates:
+        newest = max(parsed_dates)  # most recent source
+    else:
+        newest = query_created_at  # fallback to query timestamp
+
+    age_days = (timezone.now() - newest).days
+    score = 100 * math.exp(-age_days / decay_factor)
+
+    return float(round(score, 2))
 
 
 def compute_relevance(query_obj, topic, summary):
-    q_tokens = set(re.findall(
-        r"\w+", f"{query_obj.industry} {query_obj.persona} {query_obj.region} {query_obj.date_range}".lower()))
+    query_text = f"{query_obj.industry} {query_obj.persona} {query_obj.region} {query_obj.date_range}"
+    trend_text = f"{topic} {summary}"
 
-    text_tokens = set(re.findall(r"\w+", f"{topic} {summary}".lower()))
-
-    if not q_tokens or not text_tokens:
-        return 0.0
-
-    inter = q_tokens.intersection(text_tokens)
-    union = q_tokens.union(text_tokens)
-    score = (len(inter) / len(union)) * 100.0
-    return float(round(score, 2))
+    embeddings = model.encode([query_text, trend_text], convert_to_tensor=True)
+    similarity = util.cos_sim(embeddings[0], embeddings[1]).item()
+    relevance = max(0.0, round(similarity * 100, 2))
+    return relevance
 
 
 def extract_json_from_text(text):

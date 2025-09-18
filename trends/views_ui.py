@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 import requests
-from .models import TrendQuery, TrendResult
+from .models import TrendQuery, TrendResult, QuerySubscription
 from django.contrib.auth import login, logout, authenticate, get_user_model
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib.auth.decorators import login_required
@@ -123,6 +123,12 @@ def submit_query(request):
 
         query.user.add(request.user)
 
+        QuerySubscription.objects.get_or_create(
+            user=request.user,
+            query=query,
+            defaults={"wants_emails": True}
+        )
+
         process_trend_query.delay(str(query.id))
 
         # Redirect to detail page
@@ -157,6 +163,10 @@ def query_detail(request, id):
         .order_by("-version")
     )
 
+    sub = QuerySubscription.objects.filter(
+        user=request.user, query=query).first()
+    subscribed = sub.wants_emails if sub else False
+
     results = query.results.filter(version=version).order_by("-final_score")
     return render(
         request,
@@ -166,10 +176,11 @@ def query_detail(request, id):
             "results": results,
             "version": version,
             "versions": versions,
+            "subscribed": subscribed,
         },
     )
 
- 
+
 @login_required
 def result_detail(request, query_id, id):
     query = get_object_or_404(TrendQuery, id=query_id)
@@ -186,12 +197,44 @@ def result_detail(request, query_id, id):
     })
 
 
-def unsubscribe_confirm(request, user_id):
-    user = get_object_or_404(User, id=user_id)
+@login_required
+def toggle_subscriptions(request, id):
+    query = get_object_or_404(TrendQuery, id=id)
 
+    if request.method != "POST":
+        return redirect(reverse("query-detail-frontend", args=[id]))
+
+    sub, created = QuerySubscription.objects.get_or_create(
+        user=request.user,
+        query=query,
+        defaults={"wants_emails": True}
+    )
+
+    action = request.POST.get("action")
+    if action == "subscribe":
+        sub.wants_emails = True
+    elif action == "unsubscribe":
+        sub.wants_emails = False
+    else:
+        sub.wants_emails = not sub.wants_emails
+
+    sub.save()
+    return redirect(reverse("query-detail-frontend", args=[id]))
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def unsubscribe_query_confirm(request, query_id, user_id):
+    user = request.user
+    if not request.user.is_authenticated or str(request.user.id) != str(user_id):
+        return redirect("login")
+
+    query = get_object_or_404(TrendQuery, id=query_id)
     if request.method == "POST":
-        user.wants_emails = False
-        user.save()
-        return render(request, "trends/unsubscribed.html", {"user": user})
-
-    return render(request, "trends/unsubscribe_confirm.html", {"user": user})
+        sub = QuerySubscription.objects.filter(
+            user=request.user, query=query).first()
+        if sub:
+            sub.wants_emails = False
+            sub.save()
+        return render(request, "trends/unsubscribed.html", {"user": request.user})
+    return render(request, "trends/unsubscribe_confirm.html", {"user": request.user, "query": query})

@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 from django.shortcuts import get_object_or_404
-from .models import TrendQuery, TrendResult
+from .models import TrendQuery, TrendResult, QuerySubscription
 from .serializers import TrendQuerySerializer, TrendResultSerializer, TrendQueryCreateSerializer, SignupSerializer, LoginSerializer
 from .tasks import process_trend_query
 from rest_framework.pagination import PageNumberPagination
@@ -38,7 +38,7 @@ class SignupAPI(APIView):
                 {
                     "success": False,
                     "message": "All fields are required"
-                }, 
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -238,6 +238,11 @@ class TrendQueryCreateView(APIView):
                 )
 
             query = serializer.save(status="pending", user=request.user)
+            QuerySubscription.objects.get_or_create(
+                user=request.user,
+                query=query,
+                defaults={"wants_emails": True}
+            )
             process_trend_query.delay(str(query.id))
             return Response(
                 {
@@ -272,3 +277,38 @@ class TrendResultDetailView(APIView):
 
         serializer = TrendResultSerializer(trend)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class QuerySubscriptionToggleAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, query_id):
+        try:
+            query = TrendQuery.objects.get(id=query_id)
+        except TrendQuery.DoesNotExist:
+            return Response(
+                {
+                    "error": "Query not found."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        sub, created = QuerySubscription.objects.get_or_create(
+            user=request.user,
+            query=query,
+            defaults={"wants_emails": True}
+        )
+
+        wants = request.data.get("wants_emails", None)
+        if wants is None:
+            sub.wants_emails = not sub.wants_emails
+        else:
+            sub.wants_emails = bool(wants)
+
+        sub.save()
+        return Response(
+            {
+                "query_id": str(query_id),
+                "wants_emails": sub.wants_emails
+            }
+        )

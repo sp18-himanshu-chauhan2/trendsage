@@ -1,6 +1,6 @@
 from .services import fetch_trends_from_perplexity
 from celery import shared_task
-from .models import TrendQuery, TrendResult
+from .models import TrendQuery, TrendResult, QuerySubscription
 import logging
 from django.utils.timezone import now
 from .email_utils import send_trend_email
@@ -51,27 +51,33 @@ def refresh_trend_queries():
 
     for query in queries:
         try:
+            subscriptions = QuerySubscription.objects.filter(
+                query=query,
+                wants_emails=True
+            ).select_related("user")
+
+            if not subscriptions.exists():
+                logger.info(
+                    f"Skipping query {query.id} ({query.industry}) — no active subscriptions."
+                )
+                continue
+
             logger.info(f"Refreshing query {query.id} ({query.industry})")
             fetch_trends_from_perplexity(query)
 
-            latest_version = query.results.aggregate(Max("version"))["version__max"]
+            latest_version = query.results.aggregate(Max("version"))[
+                "version__max"]
 
             if not latest_version:
-                logger.warning(f"No results for query {query.id} after refresh")
+                logger.warning(
+                    f"No results for query {query.id} after refresh")
                 continue
 
-            results = TrendResult.objects.filter(query=query, version=latest_version).order_by("-final_score")
+            results = TrendResult.objects.filter(
+                query=query, version=latest_version).order_by("-final_score")
 
-            if hasattr(query, "user"):  # M2M
-                recipients = list(query.user.all())
-            else:
-                recipients = []
-
-            for user in recipients:
-                if not getattr(user, "wants_emails", True):
-                    logger.info(f"Skipping email to {user.email} (wants_emails=False)")
-                    continue
-                
+            for sub in subscriptions:
+                user = sub.user
                 send_trend_email(
                     user=user,
                     query=query,

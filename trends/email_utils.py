@@ -14,14 +14,14 @@ def build_detail_url(query_id, version=None):
     return url
 
 
-def build_unsubscribe_url(user):
-    return urljoin(BASE_URL, f"/trendsage/web/unsubscribe/{user.id}/")
+def build_unsubscribe_url(user, query):
+    return urljoin(BASE_URL, f"/trendsage/web/query/{query.id}/subscription/unsubscribe/{user.id}/")
 
 
 def send_trend_email(user, query, version, results=None, subject=None, message=None, include_results=True):
     subject = subject or f"Trends Update for {query.industry} -- vesrion {version}"
     detail_url = build_detail_url(query.id, version)
-    unsubscribe_url = build_unsubscribe_url(user)
+    unsubscribe_url = build_unsubscribe_url(user, query)
     updated_at = timezone.localtime(query.updated_at)
 
     results_list = list(results) if results is not None else []

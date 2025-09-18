@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import TrendQueryDetailView, TrendQueryCreateView, TrendResultDetailView, SignupAPI, LoginAPI, DashboardAPI, LogoutAPI
+from .views import TrendQueryDetailView, TrendQueryCreateView, TrendResultDetailView, SignupAPI, LoginAPI, DashboardAPI, LogoutAPI, QuerySubscriptionToggleAPI
 
 
 urlpatterns = [
@@ -18,4 +18,8 @@ urlpatterns = [
 
     # Dashboard
     path("dashboard/", DashboardAPI.as_view(), name="api-dashboard"),
+
+    # Subscription
+    path("trends/query/<uuid:query_id>/subscription/", QuerySubscriptionToggleAPI.as_view(), name="api-query-subscription"),
+
 ]

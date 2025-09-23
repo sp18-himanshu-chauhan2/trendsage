@@ -59,7 +59,7 @@ def login_view(request):
             return redirect("dashboard")
         else:
             return render(request, "trends/login.html", {
-                "error": "Invalid email or password"
+                "error": "Invalid credentials. Please try again."
             })
 
     return render(request, "trends/login.html")
@@ -110,6 +110,11 @@ def submit_query(request):
         if existing_query:
             # Reuse existing query → redirect to its detail page
             existing_query.user.add(request.user)
+            QuerySubscription.objects.get_or_create(
+                user=request.user,
+                query=existing_query,
+                defaults={"wants_emails": True, "is_active": True},
+            )
             return redirect(reverse("query-detail-frontend", args=[existing_query.id]))
 
         # If no recent query found → create new one
@@ -126,7 +131,10 @@ def submit_query(request):
         QuerySubscription.objects.get_or_create(
             user=request.user,
             query=query,
-            defaults={"wants_emails": True}
+            defaults={
+                "wants_emails": True, 
+                "is_active": True
+            }
         )
 
         process_trend_query.delay(str(query.id))
@@ -143,17 +151,21 @@ def query_detail(request, id):
 
     version_param = request.GET.get("version")
 
+    latest_version = query.results.aggregate(Max("version"))["version__max"] or 1
+
     if version_param:
         try:
             version = int(version_param)
         except ValueError:
-            version = query.results.aggregate(Max("version"))[
-                "version__max"] or 1
+            version = latest_version
     else:
-        version = query.results.aggregate(Max("version"))["version__max"] or 1
+        version = latest_version
 
-    if request.user not in query.user.all():
+    sub = QuerySubscription.objects.filter(user=request.user, query=query).first()
+    if not sub:
         return render(request, "trends/query_detail.html", {
+            "query": query,
+            "subscription": None,
             "error": "You do not have permission to view this query."
         })
 
@@ -162,10 +174,6 @@ def query_detail(request, id):
         .distinct()
         .order_by("-version")
     )
-
-    sub = QuerySubscription.objects.filter(
-        user=request.user, query=query).first()
-    subscribed = sub.wants_emails if sub else False
 
     results = query.results.filter(version=version).order_by("-final_score")
     return render(
@@ -176,7 +184,7 @@ def query_detail(request, id):
             "results": results,
             "version": version,
             "versions": versions,
-            "subscribed": subscribed,
+            "subscription": sub,
         },
     )
 
@@ -202,24 +210,32 @@ def toggle_subscriptions(request, id):
     query = get_object_or_404(TrendQuery, id=id)
 
     if request.method != "POST":
-        return redirect(reverse("query-detail-frontend", args=[id]))
+        return redirect(request.META.get("HTTP_REFERER", "dashboard"))
 
+    action = request.POST.get("action")
     sub, created = QuerySubscription.objects.get_or_create(
         user=request.user,
         query=query,
-        defaults={"wants_emails": True}
+        defaults={
+            "wants_emails": True, 
+            "is_active": True
+        }
     )
 
-    action = request.POST.get("action")
     if action == "subscribe":
         sub.wants_emails = True
     elif action == "unsubscribe":
         sub.wants_emails = False
+    elif action == "activate":
+        sub.is_active = True
+    elif action == "deactivate":
+        sub.is_active = False
     else:
+        # default toggle behaviour: toggle wants_emails
         sub.wants_emails = not sub.wants_emails
 
     sub.save()
-    return redirect(reverse("query-detail-frontend", args=[id]))
+    return redirect(request.META.get("HTTP_REFERER", "dashboard"))
 
 
 @login_required
@@ -238,3 +254,29 @@ def unsubscribe_query_confirm(request, query_id, user_id):
             sub.save()
         return render(request, "trends/unsubscribed.html", {"user": request.user})
     return render(request, "trends/unsubscribe_confirm.html", {"user": request.user, "query": query})
+
+
+@login_required
+def profile_view(request):
+    user = request.user
+    queries = user.trend_queries.all().order_by("-created_at")
+
+    queries_with_versions = []
+    for q in queries:
+        latest_version = q.results.aggregate(Max("version"))["version__max"] or None
+        queries_with_versions.append({
+            "query": q,
+            "latest_version": latest_version,
+        })
+
+    subscriptions = QuerySubscription.objects.filter(user=user).select_related("query")
+
+    context = {
+        "user": user,
+        "queries": queries_with_versions,
+        "subscriptions": subscriptions,
+        "total_queries": queries.count(),
+        "active_subscriptions": subscriptions.filter(wants_emails=True).count(),
+        "active_queries": subscriptions.filter(is_active=True).count(),
+    }
+    return render(request, "trends/profile.html", context)

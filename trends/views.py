@@ -4,7 +4,7 @@ from rest_framework.views import APIView
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from .models import TrendQuery, TrendResult, QuerySubscription
-from .serializers import TrendQuerySerializer, TrendResultSerializer, TrendQueryCreateSerializer, SignupSerializer, LoginSerializer
+from .serializers import TrendQuerySerializer, TrendResultSerializer, TrendQueryCreateSerializer, SignupSerializer, LoginSerializer, UserSerializer, TrendQueryBriefSerializer, QuerySubscriptionSerializer
 from .tasks import process_trend_query
 from rest_framework.pagination import PageNumberPagination
 from django.utils.timezone import now
@@ -16,6 +16,8 @@ from uuid import UUID
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.authtoken.models import Token
+from rest_framework.authentication import SessionAuthentication, TokenAuthentication
+from django.db.models import Max
 # Create your views here.
 
 
@@ -241,7 +243,10 @@ class TrendQueryCreateView(APIView):
             QuerySubscription.objects.get_or_create(
                 user=request.user,
                 query=query,
-                defaults={"wants_emails": True}
+                defaults={
+                    "wants_emails": True,
+                    "is_active": True
+                }
             )
             process_trend_query.delay(str(query.id))
             return Response(
@@ -312,3 +317,63 @@ class QuerySubscriptionToggleAPI(APIView):
                 "wants_emails": sub.wants_emails
             }
         )
+
+
+class ToggleSubscriptionAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, query_id):
+        action = request.data.get("action")
+        query = get_object_or_404(TrendQuery, id=query_id)
+        sub, _ = QuerySubscription.objects.get_or_create(
+            user=request.user, 
+            query=query, 
+            defaults={"wants_emails": True, "is_active": True},
+        )
+
+        if action == "subscribe":
+            sub.wants_emails = True
+        elif action == "unsubscribe":
+            sub.wants_emails = False
+        elif action == "activate":
+            sub.is_active = True
+        elif action == "deactivate":
+            sub.is_active = False
+        else:
+            return Response({"error": "Invalid action"}, status=400)
+
+        sub.save()
+        return Response(
+            {
+                "query_id": str(query_id), 
+                "wants_emails": sub.wants_emails, 
+                "is_active": sub.is_active
+            }
+        )
+
+
+class MeAPIView(APIView):
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, format=None):
+        user = request.user
+        user_data = UserSerializer(user).data
+        user_queries_qs = user.trend_queries.all().order_by("-created_at")[:10]
+        queries_data = TrendQueryBriefSerializer(
+            user_queries_qs, many=True).data
+
+        subs_qs = QuerySubscription.objects.filter(user=user)
+        subs_count = subs_qs.filter(wants_emails=True).count()
+        subs_data = QuerySubscriptionSerializer(subs_qs, many=True).data
+
+        payload = {
+            "user": user_data,
+            "stats": {
+                "total_queries": user.trend_queries.count(),
+                "acive_subscriptions": subs_count,
+            },
+            "recent_queries": queries_data,
+            "subscriptions": subs_data,
+        }
+        return Response(payload, status=status.HTTP_200_OK)

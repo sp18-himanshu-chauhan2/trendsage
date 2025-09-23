@@ -28,8 +28,6 @@ class User(AbstractUser):
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
 
-    wants_emails = models.BooleanField(default=True)
-
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["first_name", "last_name"]
 
@@ -114,7 +112,8 @@ class QuerySubscription(models.Model):
         on_delete=models.CASCADE,
         related_name="subscriptions"
     )
-    wants_emails = models.BooleanField(default=True)
+    wants_emails = models.BooleanField(default=True) # email
+    is_active = models.BooleanField(default=True) # refresh updates
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -123,4 +122,4 @@ class QuerySubscription(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"Subscription: {self.user} -> {self.query} (emails={self.wants_emails})"
+        return f"{self.user.email} - {self.query.industry}/{self.query.region} (emails={self.wants_emails} active={self.is_active})"

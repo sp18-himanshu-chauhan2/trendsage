@@ -2,6 +2,23 @@
 {% block content %}
 <div class="container mt-4">
     <h2>Login</h2>
+    {% if error %}
+    <div class="modal fade show" id="errorModal" tabindex="-1" aria-hidden="true" style="display:block; background:rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">Login Failed</h5>
+                </div>
+                <div class="modal-body">
+                    {{ error }}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('errorModal').style.display='none'">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endif %}
     <form method="post">
         {% csrf_token %}
         <input type="email" name="email" placeholder="Email" class="form-control mb-2" required>

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2>{{ request.user.first_name }} {{ request.user.last_name }}</h2>
+            <div class="text-muted">{{ request.user.email }}</div>
+            <div class="text-muted small">Member since {{ request.user.date_joined|date:"M d, Y" }}</div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card p-3">
+                <div class="h6">Total queries</div>
+                <div class="display-6">{{ total_queries }}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-3">
+                <div class="h6">Active Email Notifications</div>
+                <div class="display-6">{{ active_subscriptions }}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-3">
+                <div class="h6">Active Queries</div>
+                <div class="display-6">{{ active_queries }}</div>
+            </div>
+        </div>
+    </div>
+
+    <h3>Recent queries</h3>
+    <table class="table table-striped">
+    <thead>
+        <tr>
+        <th>Industry</th>
+        <th>Region</th>
+        <th>Persona</th>
+        <th>Date range</th>
+        <th>Status</th>
+        <th>Version</th>
+        <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% if queries %}
+        {% for item in queries %}
+            <tr>
+            <td>{{ item.query.industry }}</td>
+            <td>{{ item.query.region }}</td>
+            <td>{{ item.query.persona }}</td>
+            <td>{{ item.query.date_range }}</td>
+            <td>{{ item.query.status }}</td>
+            <td>{{ item.latest_version|default:"-" }}</td>
+            <td>
+                <a href="{% url 'query-detail-frontend' item.query.id %}" class="btn btn-sm btn-info">View</a>
+            </td>
+            </tr>
+        {% endfor %}
+        {% else %}
+        <tr><td colspan="7">No queries yet.</td></tr>
+        {% endif %}
+    </tbody>
+    </table>
+
+    <h3>Subscriptions</h3>
+    <table class="table table-striped">
+    <thead>
+        <tr>
+        <th>Query</th>
+        <th>Email Notifications</th>
+        <th>Status</th>
+        <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% if subscriptions %}
+        {% for s in subscriptions %}
+            <tr>
+            <td>
+                <a href="{% url 'query-detail-frontend' s.query.id %}">
+                {{ s.query.industry }} | {{ s.query.region }} | {{ s.query.persona }}
+                </a>
+            </td>
+            <td>
+                {% if s.wants_emails %} ✅ Enabled {% else %} ❌ Disabled {% endif %}
+            </td>
+            <td>
+                {% if s.is_active %} ✅ Active {% else %} ❌ Inactive {% endif %}
+            </td>
+            <td>
+                <form method="post" action="{% url 'toggle-subscription' s.query.id %}">
+                {% csrf_token %}
+                {% if s.wants_emails %}
+                    <input type="hidden" name="action" value="unsubscribe" />
+                    <button class="btn btn-sm btn-danger mb-3">Disable Notifications</button>
+                {% else %}
+                    <input type="hidden" name="action" value="subscribe" />
+                    <button class="btn btn-sm btn-primary mb-3">Enable Notifications</button>
+                {% endif %}
+                </form>
+                <form method="post" action="{% url 'toggle-subscription' s.query.id %}">
+                    {% csrf_token %}
+                    {% if s.is_active %}
+                    <input type="hidden" name="action" value="deactivate" />
+                    <button class="btn btn-sm btn-warning">Deactivate</button>
+                    {% else %}
+                    <input type="hidden" name="action" value="activate" />
+                    <button class="btn btn-sm btn-success">Activate</button>
+                    {% endif %}
+                </form>
+            </td>
+            </tr>
+        {% endfor %}
+        {% else %}
+        <tr><td colspan="3">No subscriptions</td></tr>
+        {% endif %}
+    </tbody>
+    </table>
+
+</div>
+{% endblock %}

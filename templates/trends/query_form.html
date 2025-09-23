@@ -17,8 +17,15 @@
         <input type="text" class="form-control" name="persona" placeholder="e.g. founders" required>
     </div>
     <div class="mb-3">
-        <label class="form-label">Date Range</label>
-        <input type="text" class="form-control" name="date_range" placeholder="e.g. last month" required>
+        <label for="date_range" class="form-label">Date Range</label>
+        <select name="date_range" id="date_range" class="form-control" required>
+            <option value="select" selected>--- Select ---</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last 3 days">Last 3 days</option>
+            <option value="last 7 days">Last 7 days</option>
+            <option value="last 10 days">Last 10 days</option>
+            <option value="last 15 days">Last 15 days</option>
+        </select>
     </div>
     <button type="submit" class="btn btn-primary">Submit Query</button>
 </form>

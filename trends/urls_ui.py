@@ -22,4 +22,7 @@ urlpatterns = [
     #unsubscribe
     path("query/<uuid:id>/subscription/toggle/", views_ui.toggle_subscriptions, name="toggle-subscription"),
     path("query/<uuid:query_id>/subscription/unsubscribe/<uuid:user_id>/", views_ui.unsubscribe_query_confirm, name="unsubscribe-query-confirm"),
+
+    # Profile
+    path("profile/", views_ui.profile_view, name="profile"),
 ]

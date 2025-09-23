@@ -1,5 +1,6 @@
 from django.urls import path
-from .views import TrendQueryDetailView, TrendQueryCreateView, TrendResultDetailView, SignupAPI, LoginAPI, DashboardAPI, LogoutAPI, QuerySubscriptionToggleAPI
+from .views import TrendQueryDetailView, TrendQueryCreateView, TrendResultDetailView, SignupAPI, LoginAPI, DashboardAPI, LogoutAPI, QuerySubscriptionToggleAPI, MeAPIView, ToggleSubscriptionAPI
+from rest_framework.authtoken.views import obtain_auth_token
 
 
 urlpatterns = [
@@ -21,5 +22,9 @@ urlpatterns = [
 
     # Subscription
     path("trends/query/<uuid:query_id>/subscription/", QuerySubscriptionToggleAPI.as_view(), name="api-query-subscription"),
+    path("trends/query/<uuid:query_id>/subscription/toggle/", ToggleSubscriptionAPI.as_view(), name="toggle-subscription-api"),
 
+    #Profile
+    path("auth/token/", obtain_auth_token, name="api_token_auth"),
+    path("profile/me/", MeAPIView.as_view(), name="api-me"),
 ]

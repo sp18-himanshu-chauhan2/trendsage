@@ -25,4 +25,7 @@ urlpatterns = [
 
     # Profile
     path("profile/", views_ui.profile_view, name="profile"),
+
+    #Retry
+    path("query/<uuid:id>/retry/", views_ui.retry_query, name="query-retry-frontend"),
 ]

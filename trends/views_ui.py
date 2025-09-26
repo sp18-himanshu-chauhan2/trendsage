@@ -11,6 +11,7 @@ from django.urls import reverse
 from .tasks import process_trend_query
 from django.db.models import Max
 from django.views.decorators.http import require_http_methods
+from django.http import JsonResponse, HttpResponseForbidden
 
 API_BASE = "http://127.0.0.1:8000/trendsage/api"
 User = get_user_model()
@@ -132,7 +133,7 @@ def submit_query(request):
             user=request.user,
             query=query,
             defaults={
-                "wants_emails": True, 
+                "wants_emails": True,
                 "is_active": True
             }
         )
@@ -161,7 +162,8 @@ def query_detail(request, id):
     else:
         version = latest_version
 
-    sub = QuerySubscription.objects.filter(user=request.user, query=query).first()
+    sub = QuerySubscription.objects.filter(
+        user=request.user, query=query).first()
     if not sub:
         return render(request, "trends/query_detail.html", {
             "query": query,
@@ -217,7 +219,7 @@ def toggle_subscriptions(request, id):
         user=request.user,
         query=query,
         defaults={
-            "wants_emails": True, 
+            "wants_emails": True,
             "is_active": True
         }
     )
@@ -263,13 +265,15 @@ def profile_view(request):
 
     queries_with_versions = []
     for q in queries:
-        latest_version = q.results.aggregate(Max("version"))["version__max"] or None
+        latest_version = q.results.aggregate(
+            Max("version"))["version__max"] or None
         queries_with_versions.append({
             "query": q,
             "latest_version": latest_version,
         })
 
-    subscriptions = QuerySubscription.objects.filter(user=user).select_related("query")
+    subscriptions = QuerySubscription.objects.filter(
+        user=user).select_related("query")
 
     context = {
         "user": user,
@@ -280,3 +284,48 @@ def profile_view(request):
         "active_queries": subscriptions.filter(is_active=True).count(),
     }
     return render(request, "trends/profile.html", context)
+
+
+@login_required
+def retry_query(request, id):
+    query = get_object_or_404(TrendQuery, id=id)
+
+    if request.user not in query.user.all() and not request.user.is_staff:
+        return JsonResponse(
+            {
+                "error": "forbidden"
+            },
+            status=403
+        )
+    
+    if query.status == "running":
+        return JsonResponse(
+            {
+                "error": "Query already running"
+            }, 
+            status=409
+        )
+
+    query.status = "pending"
+    query.updated_at = now()
+    query.save()
+
+    sub, created = QuerySubscription.objects.get_or_create(
+        user=request.user,
+        query=query,
+        defaults={"is_active": True, "wants_emails": True}
+    )
+    if not created:
+        sub.is_active = True
+        sub.wants_emails = True
+        sub.save()
+
+    process_trend_query.delay(str(query.id))
+
+    return JsonResponse(
+        {
+            "message": "Refresh started. Results will appear when ready.",
+            "query_id": str(query.id)
+        },
+        status=202,
+    )

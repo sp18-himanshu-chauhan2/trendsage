@@ -18,9 +18,20 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 def compute_engagement_from_sources(sources):
-    urls = sources.get("urls", []) if isinstance(sources, dict) else []
-    base = min(100, len(urls) * 20)
-    return float(base)
+    urls = sources.get("urls", [])
+    data = sources.get("engagement", [])
+
+    score = 0
+    for e in data:
+        likes = e.get("likes", 0)
+        shares = e.get("shares", 0)
+        comments = e.get("comments", 0)
+        score += (likes * 0.5) + (shares * 1.0) + (comments * 0.8)
+
+    if score == 0:
+        score = min(100, len(urls) * 20)
+
+    return float(min(score, 100.0))
 
 
 def compute_freshness_from_sources(sources, query_created_at, decay_factor=7):
@@ -57,27 +68,46 @@ def compute_relevance(query_obj, topic, summary):
     return relevance
 
 
-def extract_json_from_text(text):
-    m = re.search(r'(\{.*"results"\s*:\s*\[.*\]\s*\})', text, re.S)
+def clean_json_numbers(text: str) -> str:
+    return re.sub(r'(\d+)_(\d+)', r'\1\2', text)
 
+
+def sanitize_json(text: str) -> str:
+    text = re.sub(r',(\s*[\]}])', r'\1', text)
+    text = re.sub(r'\"\"(\s*[,\]])', r'"\1', text)
+    text = text.replace("“", "\"").replace("”", "\"")
+    return text
+
+
+def extract_json_from_text(text):
+    cleaned = clean_json_numbers(text)
+    cleaned = sanitize_json(cleaned)
+
+    try:
+        return json.loads(cleaned)
+    except Exception as e:
+        logger.warning(f"Direct JSON parse failed: {e}")
+
+    m = re.search(r'(\{.*"results"\s*:\s*\[.*\]\s*\})', cleaned, re.S)
     if m:
         try:
             return json.loads(m.group(1))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"JSON parse error from regex 1: {e}")
 
-    m2 = re.search(r'(\[.*\])', text, re.S)
-
+    m2 = re.search(r'(\[.*\])', cleaned, re.S)
     if m2:
         try:
-            return json.loads(m2.group)
-        except Exception:
-            pass
+            return {"results": json.loads(m2.group(1))}
+        except Exception as e:
+            logger.error(f"JSON parse error from regex 2: {e}")
 
+    logger.error(
+        f"❌ Could not parse content into JSON. First 500 chars: {cleaned[:500]}")
     return None
 
 
-def fetch_trends_from_perplexity(query_obj: TrendQuery, max_retries=3, timeout=30):
+def fetch_trends_from_perplexity(query_obj: TrendQuery, max_retries=3, timeout=120):
     headers = {
         "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
         "Content-Type": "application/json",
@@ -98,7 +128,7 @@ def fetch_trends_from_perplexity(query_obj: TrendQuery, max_retries=3, timeout=3
                 "content": query_text
             }
         ],
-        "temperature": 0.2,
+        "temperature": 1.5,
     }
 
     resp = None
@@ -160,6 +190,9 @@ def fetch_trends_from_perplexity(query_obj: TrendQuery, max_retries=3, timeout=3
                 relevance_score = compute_relevance(
                     query_obj, r.get("topic", ""), r.get("summary", ""))
 
+            logger.info(
+                f"Preparing trend result for query {query_obj.id}, version {new_version}: {r.get('topic')}")
+
             trend = TrendResult.objects.create(
                 query=query_obj,
                 topic=r.get("topic", "Untitled"),
@@ -174,6 +207,9 @@ def fetch_trends_from_perplexity(query_obj: TrendQuery, max_retries=3, timeout=3
             )
             trend.calculate_final_score()
             trend.save()
+
+        logger.info(
+            f"✅ Saved {query_obj.results.filter(version=new_version).count()} results for query {query_obj.id} (v{new_version})")
 
         query_obj.status = "completed"
         query_obj.save()

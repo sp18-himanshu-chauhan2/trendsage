@@ -9,7 +9,9 @@
 <p><strong>Persona:</strong> {{ query.persona }}</p>
 <p><strong>Date Range:</strong> {{ query.date_range }}</p>
 <p><strong>Status:</strong> {{ query.status }}</p>
-<p><strong>Last Updated:</strong> {{ query.updated_at|naturaltime }}</p>
+<p><strong>Last Updated:</strong> 
+    <span class="last-updated" data-time="{{ query.updated_at|date:'c' }}"></span>
+</p>
 
 {% if subscription and not subscription.is_active %}
     <div class="alert alert-warning text-center my-5">
@@ -74,12 +76,19 @@
     </script>
 {% else %}
     <div class="alert alert-info text-center my-5">
-        <p>Unable to load results. Please check your internet connection or try again.</p>
-        {% csrf_token %}
-        {% if query.status == "failed" %}
-            <input type="hidden" name="" value="" />
-            <button class="btn btn-sm btn-primary mb-3">Refresh</button>
-        {% endif %}
+        <p>No results available for this query yet.</p>
+    </div>
+{% endif %}
+
+{% if query.status == "failed" %}
+    <div id="refresh-area" class="text-center my-4">
+        <form id="refresh-form" method="post" action="{% url 'query-retry-frontend' query.id %}">
+            {% csrf_token %}
+            <button id="refresh-btn" type="button" class="btn btn-primary">
+                Retry Fetching Results
+            </button>
+            <span id="refresh-msg" class="ms-2"></span>
+        </form>
     </div>
 {% endif %}
 
@@ -108,4 +117,108 @@
 {% endif %}
 
 <a href="{% url 'dashboard' %}" class="btn btn-secondary mt-3">← Back to Dashboard</a>
+
+<script>
+    (function()
+    {
+        const btn = document.getElementById('refresh-btn');
+        if (!btn) return; // only exists if query.status == "failed"
+
+        function getCookie(name) 
+        {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') 
+            {
+            const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) 
+                {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) 
+                    {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        const csrftoken = getCookie('csrftoken');
+        const msg = document.getElementById('refresh-msg');
+
+        btn.addEventListener('click', async function (e) 
+        {
+            e.preventDefault();
+            btn.disabled = true;
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Refreshing...';
+            msg.textContent = '';
+
+            try 
+            {
+                const resp = await fetch("{% url 'query-retry-frontend' query.id %}",
+                {
+                    method: "POST",
+                    headers: 
+                    {
+                        "X-CSRFToken": csrftoken,
+                        "Accept": "application/json"
+                    },
+                    body: ""
+                });
+
+                const data = await resp.json().catch(() => ({}));
+                if (resp.status === 202) 
+                {
+                    msg.innerHTML = '<span class="text-success">Refresh started — results will update shortly.</span>';
+                    btn.innerHTML = 'Refresh started';
+                    setTimeout(() => window.location.reload(), 3000);
+                } 
+                else 
+                {
+                    msg.innerHTML = '<span class="text-danger">' + (data.error || "Failed to start refresh") + '</span>';
+                    btn.disabled = false;
+                    btn.innerHTML = orig;
+                }
+            } 
+            catch (err) 
+            {
+                msg.innerHTML = '<span class="text-danger">Network error — try again.</span>';
+                btn.disabled = false;
+                btn.innerHTML = orig;
+            }
+        });
+    })();
+
+    document.querySelectorAll('.last-updated').forEach(function(el) 
+    {
+        const utcTime = el.getAttribute('data-time'); // ISO 8601 datetime
+        if (!utcTime) return;
+
+        const updatedDate = new Date(utcTime);
+        const now = new Date();
+        const diffMs = now - updatedDate; // difference in milliseconds
+        const oneDayMs = 24 * 60 * 60 * 1000;
+
+        if (diffMs < oneDayMs) 
+        {
+            // Less than 1 day ago → show relative time
+            const seconds = Math.floor(diffMs / 1000);
+            let relative = "";
+            if (seconds < 60) relative = "just now";
+            else if (seconds < 3600) relative = Math.floor(seconds/60) + " minutes ago";
+            else relative = Math.floor(seconds/3600) + " hours ago";
+            el.textContent = relative;
+        } 
+        else 
+        {
+            // More than 1 day → show absolute local time
+            const options = { 
+                year: 'numeric', month: 'short', day: 'numeric',
+                hour: 'numeric', minute: 'numeric',
+                hour12: true
+            };
+            el.textContent = updatedDate.toLocaleString(undefined, options);
+        }
+    });
+</script>
 {% endblock %}

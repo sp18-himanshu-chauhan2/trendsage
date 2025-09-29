@@ -2,6 +2,9 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.conf import settings
 import uuid
+import random
+from django.utils import timezone
+from django.contrib.auth.hashers import make_password, check_password
 
 
 class CustomUserManager(BaseUserManager):
@@ -112,8 +115,8 @@ class QuerySubscription(models.Model):
         on_delete=models.CASCADE,
         related_name="subscriptions"
     )
-    wants_emails = models.BooleanField(default=True) # email
-    is_active = models.BooleanField(default=True) # refresh updates
+    wants_emails = models.BooleanField(default=True)  # email
+    is_active = models.BooleanField(default=True)  # refresh updates
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -123,3 +126,39 @@ class QuerySubscription(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.query.industry}/{self.query.region} (emails={self.wants_emails} active={self.is_active})"
+
+
+def generate_numeric_otp(n=6):
+    return "".join(random.choices("0123456789", k=n))
+
+
+class SignUpOTP(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(db_index=True)
+    otp_hash = models.CharField(max_length=128)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+    is_used = models.BooleanField(default=False)
+    purpose = models.CharField(max_length=32, default="signup")
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["email", "created_at"]),
+        ]
+
+    def set_otp(self, otp_plain: str):
+        self.otp_hash = make_password(otp_plain)
+
+    def check_otp(self, otp_plain: str) -> bool:
+        return check_password(otp_plain, self.otp_hash)
+
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
+
+    def mark_used(self):
+        self.is_used = True
+        self.save(update_fields=["is_used"])
+
+    def __str__(self):
+        return f"OTP for {self.email} (used={self.is_used})"

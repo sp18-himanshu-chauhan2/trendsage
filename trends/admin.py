@@ -1,10 +1,11 @@
 from django.contrib import admin
-from .models import TrendQuery, TrendResult, User, QuerySubscription
+from .models import TrendQuery, TrendResult, User, QuerySubscription, SignUpOTP
 
 # Register your models here.
 admin.site.register(TrendQuery)
 admin.site.register(TrendResult)
 admin.site.register(User)
+admin.site.register(SignUpOTP)
 
 @admin.register(QuerySubscription)
 class QuerySubscriptionAdmin(admin.ModelAdmin):

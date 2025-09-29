@@ -50,3 +50,25 @@ def send_trend_email(user, query, version, results=None, subject=None, message=N
 
     email.attach_alternative(html_body, "text/html")
     email.send(fail_silently=False)
+
+
+def send_signup_otp_email(email: str, otp: str, name: str = "", expiry_minutes: int = 10):
+    subject = "Your TrendSage verification code"
+    context = {
+        "subject": subject,
+        "name": name,
+        "otp": otp,
+        "expiry_minutes": expiry_minutes,
+    }
+
+    text_body = render_to_string("emails/signup_otp.txt", context)
+    html_body = render_to_string("emails/signup_otp.html", context)
+
+    msg = EmailMultiAlternatives(
+        subject=subject, 
+        body=text_body, 
+        from_email=settings.DEFAULT_FROM_EMAIL, 
+        to=[email]
+    )
+    msg .attach_alternative(html_body, "text/html")
+    msg.send(fail_silently=False)

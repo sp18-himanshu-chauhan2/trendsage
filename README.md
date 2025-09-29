@@ -1,7 +1,6 @@
 # 📈 TrendSage
 
-**TrendSage** is an AI-powered trend research platform that integrates with the **Perplexity API** to fetch, analyze, and deliver trends.  
-It provides versioned results, scheduled refreshes, and email notifications — so users never miss what’s trending in their industry.  
+**TrendSage** is an AI-powered trend research platform that integrates with the **Perplexity API** to fetch, analyze, and deliver trends. It provides versioned results, scheduled refreshes, and email notifications — so users never miss what’s trending in their industry.  
 
 ---
 
@@ -58,7 +57,6 @@ TrendSage/
 │   ├── serializers.py
 │   ├── services.py
 │   ├── tasks.py
-│   ├── tests.py
 │   ├── urls_ui.py      # WEB urls
 │   ├── views_ui.py
 │   ├── views.py        # API views
@@ -69,7 +67,7 @@ TrendSage/
 │   ├── celery.py
 │   ├── settings.py
 │   ├── urls.py
-│   └──wsgi.py
+│   └── wsgi.py
 │  
 ├── manage.py
 ├── README.md           # <------ you are here...
@@ -95,112 +93,128 @@ pip install -r requirements.txt
 ```
 
 ### 4. Setup PostgreSQL
-
 - Install PostgreSQL (if not already).
 - Create a database:
-
 ```sql
 CREATE DATABASE trendsage_db;
 ```
 
-- In trendsage/settings.py, configure DB:
-```python
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "trendsage_db",
-        "USER": "postgres",
-        "PASSWORD": "postgres",
-        "HOST": "localhost",
-        "PORT": "5432",
-    }
-}
+### 5. Environment Variables
+- Copy the sample env file and update with your secrets:
+```bash
+cp .env.sample .env
 ```
-### 5. Run Migrations
+- Fill ```.env``` with your values:
+```bash
+# Database
+DB_NAME=your-database-name
+DB_USER=your-database-user
+DB_PASSWORD=your-database-password
+DB_HOST=localhost
+DB_PORT=5432
+
+# Django
+SECRET_KEY='your-secret-key-here'
+DEBUG=True
+ALLOWED_HOSTS=127.0.0.1,localhost
+
+# External APIs
+PERPLEXITY_API_KEY=your-perplexity-api-key-here
+
+# Redis
+REDIS_URL=redis://127.0.0.1:6379/0
+
+# Email settings
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=your_email@gmail.com
+EMAIL_HOST_PASSWORD=your_16_digit_generated_app_password
+DEFAULT_FROM_EMAIL=TrendSage <no-reply@trendsage.com>
+
+```
+
+### 6. Run Migrations
 ```bash
 python manage.py makemigrations
 python manage.py migrate
 ```
 
-### 7. Configure Email
-
-In trendsage/settings.py, add:
-```bash
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = "your_email@gmail.com"
-EMAIL_HOST_PASSWORD = "your_app_password"   # Generate from Gmail App Passwords
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
-```
-
-### 8. Run Server
+### 7. Run Server
 ```bash
 python manage.py runserver
 ```
-Now visit 👉 http://127.0.0.1:8000
+Now visit 👉 http://127.0.0.1:8000/trendsage/web/login/
 
 ## ⏱️ Celery Setup
 ### Start Redis (Broker)
 ```bash
-redis-server
+redis-server                            # Mac
+docker run -d -p 6379:6379 redis        # Windows on WSL
 ```
 
 ### Start Celery Worker
 ```bash
-celery -A trendsage worker -l info
+celery -A trendsage worker -l info              # for deployment
+celery -A trendsage worker -l info -P solo      # for localhost
 ```
 
 ### Start Celery Beat (Scheduler)
 ```bash
 celery -A trendsage beat -l info
 ```
-Tasks:
 
-process_trend_query → handles new queries.
-
-refresh_trend_queries → refreshes all queries daily and emails results.
-
-## 📧 Email Setup
-
-### Update settings.py with SMTP:
-```bash
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = "your_email@gmail.com"
-EMAIL_HOST_PASSWORD = "your_app_password"
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
-```
+#### Tasks:
+- process_trend_query → handles new queries.
+- refresh_trend_queries → refreshes all queries daily and emails results.
 
 ## 🔗 API Endpoints (Brief)
 
 ### Auth
-<ul>
-    <li>POST /api/signup/start/ → Start signup (send OTP)</li>
-    <li>POST /api/signup/verify/ → Verify OTP & create account</li>
-    <li>POST /api/login/ → Login</li>
-    <li>POST /api/logout/ → Logout</li>
-</ul>
+- ```POST /api/auth/signup/start/``` → Start signup (send OTP)
+- ```POST /api/auth/signup/verify/``` → Verify OTP & create account
+- ```POST /api/auth/login/``` → Login
+- ```POST /api/auth/logout/``` → Logout
+- ```POST /api/auth/token/``` → Obtain auth token (DRF default)
 
 ### Trends
-<ul>
-    <li>POST /api/trends/submit/ → Submit new query</li>
-    <li>GET /api/trends/ → List queries (with filters)</li>
-    <li>GET /api/trends/<id>/ → Query detail (latest version)</li>
-    <li>GET /api/trends/<id>/history/ → Query history (all versions)</li>
-    <li>POST /api/trends/<id>/deactivate/ → Pause a query</li>
-    <li>POST /api/trends/<id>/activate/ → Reactivate a query</li>
-</ul>
+- ```POST /api/trends/query/ ```→ Create new trend query
+- ```GET /api/trends/query/<id>/``` → Get query detail (latest version + metadata)
+- ```GET /api/trends/<id>/``` → Get specific trend result detail
+- ```POST /api/trends/query/<id>/subscription/``` → Toggle email subscription (legacy)
+- ```POST /api/trends/query/<id>/subscription/toggle/``` → Toggle email subscription (preferred)
 
+### Dashboard
+- ```GET /api/dashboard/``` → List all queries for the logged-in user
 
+### Profile
+- ```GET /api/profile/me/``` → Get current user profile
 
+## 🌐 Web Endpoints (UI)
 
+### Query
+- ```GET /trendsage/web/query/``` → New query form
+- ```POST /trendsage/web/query/submit/``` → Submit new query
+- ```GET /trendsage/web/query/<id>/results/``` → Query detail (latest results, version switcher)
+- ```GET /trendsage/web/query/<query_id>/results/<id>/``` → Specific trend result detail
+- ```POST /trendsage/web/query/<id>/retry/``` → Retry a failed query
 
+### Auth (UI)
+- ```GET /trendsage/web/signup/``` → Signup page
+- ```GET /trendsage/web/login/``` → Login page
+- ```GET /trendsage/web/logout/``` → Logout
 
+### Dashboard
+- ```GET /trendsage/web/dashboard/``` → User dashboard (list queries)
 
+### Subscription
+- ```POST /trendsage/web/query/<id>/subscription/toggle/```→ Toggle subscription
+- ```GET /trendsage/web/query/<query_id>/subscription/unsubscribe/<user_id>/``` → Unsubscribe confirmation page
 
+### Profile
+- ```GET /trendsage/web/profile/``` → Profile page
 
+---
 
+<p align="center">I hope <strong>TrendSage</strong> helps you stay ahead of trends! 🌟</p>

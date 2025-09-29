@@ -133,3 +133,18 @@ class QuerySubscriptionSerializer(serializers.ModelSerializer):
             "is_active",
             "created_at",
         ]
+
+
+class SignupStartSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    first_name = serializers.CharField()
+    last_name = serializers.CharField()
+
+
+class SignupVerifySerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField(max_length=6)
+    password = serializers.CharField(write_only=True)
+    password2 = serializers.CharField(write_only=True)
+    first_name = serializers.CharField()
+    last_name = serializers.CharField()

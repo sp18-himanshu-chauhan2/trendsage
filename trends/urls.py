@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import TrendQueryDetailView, TrendQueryCreateView, TrendResultDetailView, SignupAPI, LoginAPI, DashboardAPI, LogoutAPI, QuerySubscriptionToggleAPI, MeAPIView, ToggleSubscriptionAPI
+from .views import TrendQueryDetailView, TrendQueryCreateView, TrendResultDetailView, SignupAPI, LoginAPI, DashboardAPI, LogoutAPI, QuerySubscriptionToggleAPI, MeAPIView, ToggleSubscriptionAPI, SignupStartAPI, SignupVerifyAPI
 from rest_framework.authtoken.views import obtain_auth_token
 
 
@@ -13,7 +13,9 @@ urlpatterns = [
         name="trend-result-detail"),
     
     # Auth
-    path("auth/signup/", SignupAPI.as_view(), name="api-signup"),
+    # path("auth/signup/", SignupAPI.as_view(), name="api-signup"),
+    path("auth/signup/start/", SignupStartAPI.as_view(), name="api-signup-start"),
+    path("auth/signup/verify/", SignupVerifyAPI.as_view(), name="api-signup-verify"),
     path("auth/login/", LoginAPI.as_view(), name="api-login"),
     path("auth/logout/", LogoutAPI.as_view(), name="api-logout"),
 

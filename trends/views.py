@@ -3,8 +3,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 from django.shortcuts import get_object_or_404
-from .models import TrendQuery, TrendResult, QuerySubscription
-from .serializers import TrendQuerySerializer, TrendResultSerializer, TrendQueryCreateSerializer, SignupSerializer, LoginSerializer, UserSerializer, TrendQueryBriefSerializer, QuerySubscriptionSerializer
+from .models import TrendQuery, TrendResult, QuerySubscription, SignUpOTP
+from .serializers import TrendQuerySerializer, TrendResultSerializer, TrendQueryCreateSerializer, SignupSerializer, LoginSerializer, UserSerializer, TrendQueryBriefSerializer, QuerySubscriptionSerializer, SignupStartSerializer, SignupVerifySerializer
 from .tasks import process_trend_query
 from rest_framework.pagination import PageNumberPagination
 from django.utils.timezone import now
@@ -18,6 +18,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.authtoken.models import Token
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from django.db.models import Max
+import random
+from django.utils import timezone
+from .email_utils import send_signup_otp_email
 # Create your views here.
 
 
@@ -326,8 +329,8 @@ class ToggleSubscriptionAPI(APIView):
         action = request.data.get("action")
         query = get_object_or_404(TrendQuery, id=query_id)
         sub, _ = QuerySubscription.objects.get_or_create(
-            user=request.user, 
-            query=query, 
+            user=request.user,
+            query=query,
             defaults={"wants_emails": True, "is_active": True},
         )
 
@@ -345,8 +348,8 @@ class ToggleSubscriptionAPI(APIView):
         sub.save()
         return Response(
             {
-                "query_id": str(query_id), 
-                "wants_emails": sub.wants_emails, 
+                "query_id": str(query_id),
+                "wants_emails": sub.wants_emails,
                 "is_active": sub.is_active
             }
         )
@@ -377,3 +380,123 @@ class MeAPIView(APIView):
             "subscriptions": subs_data,
         }
         return Response(payload, status=status.HTTP_200_OK)
+
+
+OTP_EXPIRY_MINUTES = 10
+OTP_MAX_PER_WINDOW = 3    # max OTPs sent in WINDOW_MINUTES
+WINDOW_MINUTES = 10
+MAX_VERIFY_ATTEMPTS = 5
+
+
+def generate_otp(n=6):
+    return "".join(random.choices("0123456789", k=n))
+
+
+class SignupStartAPI(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(request_body=SignupStartSerializer)
+    def post(self, request):
+        serializer = SignupStartSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"].lower()
+        first_name = serializer.validated_data["first_name"]
+        last_name = serializer.validated_data["last_name"]
+
+        if User.objects.filter(email=email).exists():
+            return Response(
+                {
+                    "success": False, 
+                    "message": "Email already in use"
+                }, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        otp = generate_otp()
+        otp_obj = SignUpOTP(
+            email=email,
+            expires_at=timezone.now() + timedelta(minutes=10),
+        )
+        otp_obj.set_otp(otp)
+        otp_obj.save()
+
+        send_signup_otp_email(
+            email=email, 
+            otp=otp,
+            name=first_name, 
+            expiry_minutes=10
+        )
+
+        return Response(
+            {
+                "success": True,
+                "message": "OTP sent to email"
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class SignupVerifyAPI(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(request_body=SignupVerifySerializer)
+    def post(self, request):
+        serializer = SignupVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        if data["password"] != data["password2"]:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Passwords do not match"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if User.objects.filter(email=data["email"]).exists():
+            return Response(
+                {
+                    "success": False,
+                    "message": "Email already registered"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        otp_obj = SignUpOTP.objects.filter(
+            email=data["email"], is_used=False).order_by("-created_at").first()
+        if not otp_obj or otp_obj.is_expired() or not otp_obj.check_otp(data["otp"]):
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid or expired OTP"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Mark OTP used
+        otp_obj.is_used = True
+        otp_obj.save(update_fields=["is_used"])
+
+        # Create user
+        user = User.objects.create_user(
+            email=data["email"],
+            password=data["password"],
+            first_name=data["first_name"],
+            last_name=data["last_name"],
+        )
+        token, _ = Token.objects.get_or_create(user=user)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Signup successful",
+                "data": {
+                    "user_id": str(user.id),
+                    "full_name": f"{user.first_name} {user.last_name}",
+                    "email": user.email,
+                    "token": token.key,
+                },
+            },
+            status=status.HTTP_201_CREATED,
+        )

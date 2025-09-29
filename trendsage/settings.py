@@ -144,8 +144,8 @@ CELERY_TIMEZONE = "UTC"
 CELERY_BEAT_SCHEDULE = {
     "refresh-trend-queries-daily": {
         "task": "trends.tasks.refresh_trend_queries",
-        "schedule": 300.0,  # every 5 min (for testing)
-        # "schedule": crontab(minute=0, hour="*"),
+        # "schedule": 300.0,  # every 5 min (for testing)
+        "schedule": crontab(minute=0, hour=0),
     },
 }
 

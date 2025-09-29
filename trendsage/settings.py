@@ -144,7 +144,7 @@ CELERY_TIMEZONE = "UTC"
 CELERY_BEAT_SCHEDULE = {
     "refresh-trend-queries-daily": {
         "task": "trends.tasks.refresh_trend_queries",
-        "schedule": 60.0,  # every 1 min (for testing)
+        "schedule": 300.0,  # every 5 min (for testing)
         # "schedule": crontab(minute=0, hour="*"),
     },
 }
@@ -190,3 +190,8 @@ EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
 
 # Default from address
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER)
+
+# Urls
+LOGIN_URL = "/trendsage/web/login/"
+LOGIN_REDIRECT_URL = "/trendsage/web/dashboard/"    # where to go after login
+LOGOUT_REDIRECT_URL = "/trendsage/web/login/"       # where to go after logout

@@ -1,0 +1,11 @@
+{{ subject }}
+
+Hi {{ name|default:"" }},
+
+Your verification code: {{ otp }}
+
+It expires in {{ expiry_minutes }} minutes.
+
+If you didn't request this, ignore this email.
+
+— Trendsage

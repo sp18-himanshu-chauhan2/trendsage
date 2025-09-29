@@ -4,74 +4,110 @@ from decouple import config
 from .models import TrendQuery, TrendResult
 from .query_builder import build_perplexity_query
 from django.utils import timezone
+from datetime import datetime
+from sentence_transformers import SentenceTransformer, util
 import json
 import time
 import re
+import math
 
 logger = logging.getLogger(__name__)
 PERPLEXITY_API_KEY = config("PERPLEXITY_API_KEY", default='')
 API_URL = "https://api.perplexity.ai/chat/completions"
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 def compute_engagement_from_sources(sources):
-    urls = sources.get("urls", []) if isinstance(sources, dict) else []
-    base = min(100, len(urls) * 20)
-    return float(base)
+    urls = sources.get("urls", [])
+    data = sources.get("engagement", [])
+
+    score = 0
+    for e in data:
+        likes = e.get("likes", 0)
+        shares = e.get("shares", 0)
+        comments = e.get("comments", 0)
+        score += (likes * 0.5) + (shares * 1.0) + (comments * 0.8)
+
+    if score == 0:
+        score = min(100, len(urls) * 20)
+
+    return float(min(score, 100.0))
 
 
-def compute_freshness_from_sources(sources, query_created_at):
+def compute_freshness_from_sources(sources, query_created_at, decay_factor=7):
     dates = sources.get("dates", []) if isinstance(sources, dict) else []
 
-    if dates:
+    parsed_dates = []
+    for d in dates:
         try:
-            parsed = [timezone.datetime.fromisoformat(d) for d in dates]
-            newest = max(parsed)
-            age_days = (timezone.now() - newest).days
-            score = max(0.0, 100.0 - age_days * 5)
-            return float(score)
+            dt = datetime.fromisoformat(d)
+            if timezone.is_naive(dt):
+                dt = timezone.make_aware(dt, timezone.get_current_timezone())
+            parsed_dates.append(dt)
         except Exception:
-            pass
+            continue
 
-    age_days = (timezone.now() - query_created_at).days
-    return float(max(0.0, 100.0 - age_days * 3))
+    if parsed_dates:
+        newest = max(parsed_dates)  # most recent source
+    else:
+        newest = query_created_at  # fallback to query timestamp
 
+    age_days = (timezone.now() - newest).days
+    score = 100 * math.exp(-age_days / decay_factor)
 
-def compute_relevance(query_obj, topic, summary):
-    q_tokens = set(re.findall(
-        r"\w+", f"{query_obj.industry} {query_obj.persona} {query_obj.region} {query_obj.date_range}".lower()))
-
-    text_tokens = set(re.findall(r"\w+", f"{topic} {summary}".lower()))
-
-    if not q_tokens or not text_tokens:
-        return 0.0
-
-    inter = q_tokens.intersection(text_tokens)
-    union = q_tokens.union(text_tokens)
-    score = (len(inter) / len(union)) * 100.0
     return float(round(score, 2))
 
 
-def extract_json_from_text(text):
-    m = re.search(r'(\{.*"results"\s*:\s*\[.*\]\s*\})', text, re.S)
+def compute_relevance(query_obj, topic, summary):
+    query_text = f"{query_obj.industry} {query_obj.persona} {query_obj.region} {query_obj.date_range}"
+    trend_text = f"{topic} {summary}"
 
+    embeddings = model.encode([query_text, trend_text], convert_to_tensor=True)
+    similarity = util.cos_sim(embeddings[0], embeddings[1]).item()
+    relevance = max(0.0, round(similarity * 100, 2))
+    return relevance
+
+
+def clean_json_numbers(text: str) -> str:
+    return re.sub(r'(\d+)_(\d+)', r'\1\2', text)
+
+
+def sanitize_json(text: str) -> str:
+    text = re.sub(r',(\s*[\]}])', r'\1', text)
+    text = re.sub(r'\"\"(\s*[,\]])', r'"\1', text)
+    text = text.replace("“", "\"").replace("”", "\"")
+    return text
+
+
+def extract_json_from_text(text):
+    cleaned = clean_json_numbers(text)
+    cleaned = sanitize_json(cleaned)
+
+    try:
+        return json.loads(cleaned)
+    except Exception as e:
+        logger.warning(f"Direct JSON parse failed: {e}")
+
+    m = re.search(r'(\{.*"results"\s*:\s*\[.*\]\s*\})', cleaned, re.S)
     if m:
         try:
             return json.loads(m.group(1))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"JSON parse error from regex 1: {e}")
 
-    m2 = re.search(r'(\[.*\])', text, re.S)
-
+    m2 = re.search(r'(\[.*\])', cleaned, re.S)
     if m2:
         try:
-            return json.loads(m2.group)
-        except Exception:
-            pass
+            return {"results": json.loads(m2.group(1))}
+        except Exception as e:
+            logger.error(f"JSON parse error from regex 2: {e}")
 
+    logger.error(
+        f"❌ Could not parse content into JSON. First 500 chars: {cleaned[:500]}")
     return None
 
 
-def fetch_trends_from_perplexity(query_obj: TrendQuery, max_retries=3, timeout=30):
+def fetch_trends_from_perplexity(query_obj: TrendQuery, max_retries=3, timeout=120):
     headers = {
         "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
         "Content-Type": "application/json",
@@ -92,7 +128,7 @@ def fetch_trends_from_perplexity(query_obj: TrendQuery, max_retries=3, timeout=3
                 "content": query_text
             }
         ],
-        "temperature": 0.2,
+        "temperature": 1.5,
     }
 
     resp = None
@@ -154,6 +190,9 @@ def fetch_trends_from_perplexity(query_obj: TrendQuery, max_retries=3, timeout=3
                 relevance_score = compute_relevance(
                     query_obj, r.get("topic", ""), r.get("summary", ""))
 
+            logger.info(
+                f"Preparing trend result for query {query_obj.id}, version {new_version}: {r.get('topic')}")
+
             trend = TrendResult.objects.create(
                 query=query_obj,
                 topic=r.get("topic", "Untitled"),
@@ -168,6 +207,9 @@ def fetch_trends_from_perplexity(query_obj: TrendQuery, max_retries=3, timeout=3
             )
             trend.calculate_final_score()
             trend.save()
+
+        logger.info(
+            f"✅ Saved {query_obj.results.filter(version=new_version).count()} results for query {query_obj.id} (v{new_version})")
 
         query_obj.status = "completed"
         query_obj.save()

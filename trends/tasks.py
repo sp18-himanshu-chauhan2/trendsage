@@ -1,6 +1,6 @@
 from .services import fetch_trends_from_perplexity
 from celery import shared_task
-from .models import TrendQuery, TrendResult
+from .models import TrendQuery, TrendResult, QuerySubscription
 import logging
 from django.utils.timezone import now
 from .email_utils import send_trend_email
@@ -23,12 +23,11 @@ def process_trend_query(self, query_id):
 
         fetch_trends_from_perplexity(query)
 
-        query.status = "completed"
+        # query.status = "completed"
         query.updated_at = now()
         query.save()
 
-        logger.info(
-            f"Trends fetched for query {query.id}")
+        logger.info(f"Trends fetched for query {query.id}")
         return f"Trends fetched for query {query.id}"
 
     except TrendQuery.DoesNotExist:
@@ -47,7 +46,8 @@ def process_trend_query(self, query_id):
 @shared_task
 def refresh_trend_queries():
     logger.info("Running refresh_trend_queries task...")
-    queries = TrendQuery.objects.filter(status="completed")
+    active_query_ids = QuerySubscription.objects.filter(is_active=True).values_list("query_id", flat=True).distinct()
+    queries = TrendQuery.objects.filter(id__in=active_query_ids, status="completed").distinct()
 
     for query in queries:
         try:
@@ -55,23 +55,17 @@ def refresh_trend_queries():
             fetch_trends_from_perplexity(query)
 
             latest_version = query.results.aggregate(Max("version"))["version__max"]
-
             if not latest_version:
                 logger.warning(f"No results for query {query.id} after refresh")
                 continue
 
-            results = TrendResult.objects.filter(query=query, version=latest_version).order_by("-final_score")
+            results = TrendResult.objects.filter(
+                query=query, version=latest_version).order_by("-final_score")
+            
+            subscriptions_to_email = QuerySubscription.objects.filter(query=query, wants_emails=True, is_active=True).select_related("user")
 
-            if hasattr(query, "user"):  # M2M
-                recipients = list(query.user.all())
-            else:
-                recipients = []
-
-            for user in recipients:
-                if not getattr(user, "wants_emails", True):
-                    logger.info(f"Skipping email to {user.email} (wants_emails=False)")
-                    continue
-                
+            for sub in subscriptions_to_email:
+                user = sub.user
                 send_trend_email(
                     user=user,
                     query=query,

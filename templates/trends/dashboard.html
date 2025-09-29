@@ -7,7 +7,7 @@
         {% for q in queries %}
         <li class="list-group-item">
             {{ q.industry }} | {{ q.region }} | {{ q.persona }} | {{ q.date_range }}
-            <small class="text-muted">(Status: {{ q.status }} | Updated: {{ q.updated_at|date:"d-m-Y" }})</small>
+            <small class="text-muted">(Status: {{ q.status }} | Updated: <span class="last-updated" data-time="{{ q.updated_at|date:'c' }}"></span>)</small>
             <a href="/trendsage/web/query/{{ q.id }}/results" class="btn btn-sm btn-outline-info float-end">View</a>
         </li>
         {% empty %}
@@ -15,4 +15,22 @@
         {% endfor %}
     </ul>
 </div>
+
+<script>
+    document.querySelectorAll('.last-updated').forEach(function(el) 
+    {
+        const utcTime = el.getAttribute('data-time'); // UTC datetime
+        const localTime = new Date(utcTime);          // JS converts it to local timezone
+        // Format like "Sept. 23, 2025, 12:34 p.m."
+        const options = { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric',
+            hour: 'numeric', 
+            minute: 'numeric',
+            hour12: true
+        };
+        el.textContent = localTime.toLocaleString(undefined, options);
+    });
+</script>
 {% endblock %}

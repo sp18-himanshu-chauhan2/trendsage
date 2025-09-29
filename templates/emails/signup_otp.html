@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+    <body style="font-family:Arial,sans-serif;line-height:1.4;">
+        <h2>{{ subject }}</h2>
+        <p>Hi {{ name|default:"" }},</p>
+        <p>Your verification code is:</p>
+        <div style="font-size:28px;font-weight:700;margin:12px 0;">
+            {{ otp }}
+        </div>
+        <p>This code will expire in {{ expiry_minutes }} minutes.</p>
+        <p>If you didn't request this, ignore this email.</p>
+        <p>— Trendsage</p>
+    </body>
+</html>

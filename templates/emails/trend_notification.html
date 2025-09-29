@@ -65,7 +65,7 @@
         <p>Hello {{ user.first_name }},</p>
         <div class="meta">
             Query: <strong>{{ query.industry }}</strong> • {{ query.region }} • {{ query.persona }} • {{ query.date_range }}<br />
-            Version: {{ version }} | Updated: {{ updated_at|date:"M d, Y H:i" }}
+            Version: {{ version }} | Updated: <span class="last-updated" data-time="{{ q.updated_at|date:'c' }}"></span>
         </div>
 
         {% if results %} {% for result in results %}
@@ -101,5 +101,22 @@
             <a href="{{ unsubscribe_url }}">unsubscribe</a>.
         </footer>
         </div>
+        <script>
+            document.querySelectorAll('.last-updated').forEach(function(el) 
+            {
+                const utcTime = el.getAttribute('data-time'); // UTC datetime
+                const localTime = new Date(utcTime);          // JS converts it to local timezone
+                // Format like "Sept. 23, 2025, 12:34 p.m."
+                const options = { 
+                    year: 'numeric', 
+                    month: 'short', 
+                    day: 'numeric',
+                    hour: 'numeric', 
+                    minute: 'numeric',
+                    hour12: true
+                };
+                el.textContent = localTime.toLocaleString(undefined, options);
+            });
+        </script>
     </body>
 </html>

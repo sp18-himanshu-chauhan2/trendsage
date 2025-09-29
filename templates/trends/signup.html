@@ -2,15 +2,142 @@
 {% block content %}
 <div class="container mt-4">
     <h2>Sign Up</h2>
-    <form method="post">
+    <form id="signup-form">
         {% csrf_token %}
-        <input type="text" name="first_name" placeholder="First Name" class="form-control mb-2" required>
-        <input type="text" name="last_name" placeholder="Last Name" class="form-control mb-2" required>
-        <input type="email" name="email" placeholder="Email" class="form-control mb-2" required>
-        <input type="password" name="password" placeholder="Password" class="form-control mb-2" required>
-        <input type="password" name="password2" placeholder="Confirm Password" class="form-control mb-2" required>
+        <input type="text" name="first_name" id="first_name" placeholder="First Name" class="form-control mb-2" required>
+        <input type="text" name="last_name" id="last_name" placeholder="Last Name" class="form-control mb-2" required>
+        <input type="email" name="email" id="email" placeholder="Email" class="form-control mb-2" required>
+        <input type="password" name="password" id="password" placeholder="Password" class="form-control mb-2" required>
+        <input type="password" name="password2" id="password2" placeholder="Confirm Password" class="form-control mb-2" required>
+        <div id="signup-msg" class="mb-2"></div>
         <button class="btn btn-primary" type="submit">Sign Up</button>
     </form>
     <p class="mt-2">Already have an account? <a href="{% url 'login' %}">Login</a></p>
 </div>
+
+<!-- OTP Modal -->
+<div class="modal fade" id="otpModal" tabindex="-1" aria-labelledby="otpModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title" id="otpModalLabel">Verify Email</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+            <p>We’ve sent an OTP to <span id="otp-email"></span>. Enter it below:</p>
+            <form id="otp-form">
+            {% csrf_token %}
+            <input type="hidden" id="otp_email">
+            <input type="hidden" id="otp_first_name">
+            <input type="hidden" id="otp_last_name">
+            <input type="hidden" id="otp_password">
+            <input type="hidden" id="otp_password2">
+
+            <input type="text" id="otp" class="form-control mb-2" placeholder="Enter OTP" required>
+            <button type="submit" class="btn btn-success w-100">Verify & Create Account</button>
+            </form>
+            <div id="otp-msg" class="mt-2"></div>
+        </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let otpAttempts = 3;
+    document.getElementById("signup-form").addEventListener("submit", async function(e) {
+        e.preventDefault();
+        const csrftoken = document.querySelector("[name=csrfmiddlewaretoken]").value;
+        const first_name = document.getElementById("first_name").value.trim();
+        const last_name = document.getElementById("last_name").value.trim();
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value;
+        const password2 = document.getElementById("password2").value;
+        const msgBox = document.getElementById("signup-msg");
+
+        msgBox.innerHTML = ""; // clear old errors
+
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            msgBox.innerHTML = `<span class="text-danger">Please enter a valid email address.</span>`;
+            return;
+        }
+
+        // Validate password match
+        if (password !== password2) {
+            msgBox.innerHTML = `<span class="text-danger">Passwords do not match.</span>`;
+            return;
+        }
+
+        // Step 1: request OTP
+        const resp = await fetch("{% url 'api-signup-start' %}", {
+            method: "POST",
+            headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrftoken,
+            },
+            body: JSON.stringify({ first_name, last_name, email }),
+        });
+        const data = await resp.json();
+
+        if (resp.ok) {
+            msgBox.innerHTML = `<span class="text-success">${data.message || "OTP sent successfully."}</span>`;
+            // Save hidden fields for OTP verification
+            document.getElementById("otp_email").value = email;
+            document.getElementById("otp_first_name").value = first_name;
+            document.getElementById("otp_last_name").value = last_name;
+            document.getElementById("otp_password").value = password;
+            document.getElementById("otp_password2").value = password2;
+
+            document.getElementById("otp-email").innerText = email;
+
+            // Show OTP modal
+            const otpModal = new bootstrap.Modal(document.getElementById("otpModal"));
+            otpModal.show();
+        } else {
+            msgBox.innerHTML = `<span class="text-danger">${data.message || "Error sending OTP."}</span>`;
+        }
+    });
+
+    // Step 2: verify OTP
+    document.getElementById("otp-form").addEventListener("submit", async function(e) {
+        e.preventDefault();
+        const csrftoken = document.querySelector("[name=csrfmiddlewaretoken]").value;
+        const email = document.getElementById("otp_email").value;
+        const first_name = document.getElementById("otp_first_name").value;
+        const last_name = document.getElementById("otp_last_name").value;
+        const password = document.getElementById("otp_password").value;
+        const password2 = document.getElementById("otp_password2").value;
+        const otp = document.getElementById("otp").value;
+
+        const resp = await fetch("{% url 'api-signup-verify' %}", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": csrftoken,
+            },
+            body: JSON.stringify({ email, first_name, last_name, otp, password, password2 }),
+        });
+        const data = await resp.json();
+
+        const msg = document.getElementById("otp-msg");
+
+        if (resp.ok) {
+            msg.innerHTML = `<span class="text-success">${data.message}</span>`;
+            setTimeout(() => {
+                window.location.href = "{% url 'dashboard' %}";
+            }, 1500);
+        } else {
+            otpAttempts -= 1;  // reduce attempts
+            if (otpAttempts > 0) {
+                msg.innerHTML = `<span class="text-danger">❌ Invalid OTP. ${otpAttempts} attempts left.</span>`;
+            } else {
+                msg.innerHTML = `<span class="text-danger">❌ Too many failed attempts. Please sign up again.</span>`;
+                setTimeout(() => {
+                    window.location.href = "{% url 'signup' %}";
+                }, 2000);
+            }
+        }
+    });
+</script>
 {% endblock %}
